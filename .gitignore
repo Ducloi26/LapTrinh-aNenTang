@@ -42,9 +42,4 @@ example
 /ios
 /android
 
-# AI agents & tools
-AGENTS.md
-CLAUDE.md
-.claude/
-.gemini/
-*.plan.md
+
