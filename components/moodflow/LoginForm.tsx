@@ -10,6 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, GradientColors } from '@/constants/moodflow';
 import { validateLogin } from '@/utils/validation';
 import Field from '@/components/moodflow/Field';
+import { supabase } from '@/lib/supabase';
 
 interface Props {
   moodColors: GradientColors;
@@ -24,16 +25,24 @@ export default function LoginForm({ moodColors, onSwitchToRegister, onLoginSucce
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = () => {
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  const handleSubmit = async () => {
     const errs = validateLogin({ email, password });
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
 
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    setAuthError(null);
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+    setLoading(false);
+    if (error) {
+      setAuthError('Email hoặc mật khẩu không đúng. Vui lòng thử lại.');
+    } else {
       onLoginSuccess();
-    }, 1100);
+    }
   };
 
   return (
@@ -71,6 +80,12 @@ export default function LoginForm({ moodColors, onSwitchToRegister, onLoginSucce
           onChangeText: setPassword,
         }}
       />
+
+      {authError ? (
+        <View style={styles.authErrorRow}>
+          <Text style={styles.authErrorText}>⚠️  {authError}</Text>
+        </View>
+      ) : null}
 
       <View style={styles.forgotRow}>
         <Pressable>
@@ -134,6 +149,17 @@ const styles = StyleSheet.create({
   separatorText: {
     fontSize: 11,
     color: COLORS.faint,
+  },
+  authErrorRow: {
+    backgroundColor: 'rgba(251,113,133,0.12)',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  authErrorText: {
+    color: COLORS.danger,
+    fontSize: 13,
   },
   forgotRow: {
     flexDirection: 'row',

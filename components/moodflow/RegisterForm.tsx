@@ -11,6 +11,7 @@ import { COLORS, GradientColors } from '@/constants/moodflow';
 import { validateRegister } from '@/utils/validation';
 import Field from '@/components/moodflow/Field';
 import PasswordStrength from '@/components/moodflow/PasswordStrength';
+import { supabase } from '@/lib/supabase';
 
 interface Props {
   moodColors: GradientColors;
@@ -28,16 +29,30 @@ export default function RegisterForm({ moodColors, onSwitchToLogin, onRegisterSu
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
 
-  const handleSubmit = () => {
+  const [authError, setAuthError] = useState<string | null>(null);
+
+  const handleSubmit = async () => {
     const errs = validateRegister({ name, email, password, confirm, agree });
     setErrors(errs);
     if (Object.keys(errs).length > 0) return;
 
     setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
+    setAuthError(null);
+
+    const { error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: { data: { display_name: name } },
+    });
+
+    setLoading(false);
+    if (error) {
+      setAuthError(error.message === 'User already registered'
+        ? 'Email này đã được đăng ký. Vui lòng đăng nhập.'
+        : 'Không thể tạo tài khoản. Vui lòng thử lại.');
+    } else {
       onRegisterSuccess();
-    }, 1100);
+    }
   };
 
   return (
@@ -126,6 +141,12 @@ export default function RegisterForm({ moodColors, onSwitchToLogin, onRegisterSu
         <View style={styles.errorRow}>
           <Text style={styles.errorIcon}>⚠️</Text>
           <Text style={styles.errorText}>{errors.agree}</Text>
+        </View>
+      ) : null}
+
+      {authError ? (
+        <View style={styles.authErrorRow}>
+          <Text style={styles.authErrorText}>⚠️  {authError}</Text>
         </View>
       ) : null}
 
@@ -231,6 +252,17 @@ const styles = StyleSheet.create({
   errorText: {
     color: COLORS.danger,
     fontSize: 12,
+  },
+  authErrorRow: {
+    backgroundColor: 'rgba(251,113,133,0.12)',
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    marginTop: 10,
+  },
+  authErrorText: {
+    color: COLORS.danger,
+    fontSize: 13,
   },
   submitBtn: {
     flexDirection: 'row',
