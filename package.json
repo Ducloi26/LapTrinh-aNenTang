@@ -12,10 +12,15 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
+    "@react-native-async-storage/async-storage": "2.2.0",
     "@react-navigation/bottom-tabs": "^7.4.0",
     "@react-navigation/elements": "^2.6.3",
     "@react-navigation/native": "^7.1.8",
+<<<<<<< HEAD
     "@supabase/supabase-js": "^2.109.0",
+=======
+    "@supabase/supabase-js": "^2.117.2",
+>>>>>>> c13c7c1e309a36fcc5075b2a540a5939d6b0f46a
     "expo": "~54.0.36",
     "expo-constants": "~18.0.13",
     "expo-font": "~14.0.12",
