@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
-import { View, Text, Image, Pressable, StyleSheet } from 'react-native';
-import { COLORS, Track } from '@/constants/moodflow';
-import Icon from '@/components/moodflow/shared/Icon';
+import Icon from "@/components/moodflow/shared/Icon";
+import { COLORS, Track } from "@/constants/moodflow";
+import React, { useState } from "react";
+import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 interface MusicCardProps {
   track: Track;
@@ -13,7 +13,7 @@ export default function MusicCard({ track, onPlay }: MusicCardProps) {
 
   return (
     <View style={styles.card}>
-      {/* Cover Art */}
+      {}
       <View style={styles.coverWrap}>
         {track.cover ? (
           <Image source={{ uri: track.cover }} style={styles.coverImg} />
@@ -22,7 +22,7 @@ export default function MusicCard({ track, onPlay }: MusicCardProps) {
         )}
       </View>
 
-      {/* Track Info & Actions */}
+      {/* Track Info  */}
       <View style={styles.infoWrap}>
         <View style={styles.topRow}>
           <View style={{ flex: 1, minWidth: 0 }}>
@@ -45,7 +45,7 @@ export default function MusicCard({ track, onPlay }: MusicCardProps) {
               <Icon
                 name="heart"
                 size={14}
-                color={liked ? '#F472B6' : COLORS.faint}
+                color={liked ? "#F472B6" : COLORS.faint}
               />
             </Pressable>
             <Pressable style={styles.actionBtnTransparent}>
@@ -56,7 +56,7 @@ export default function MusicCard({ track, onPlay }: MusicCardProps) {
 
         {/* Reason */}
         {track.reason ? (
-          <Text style={styles.reasonText}>"{track.reason}"</Text>
+          <Text style={styles.reasonText}>{track.reason}</Text>
         ) : null}
       </View>
     </View>
@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
     borderColor: COLORS.border,
     borderRadius: 16,
     padding: 14,
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 14,
     marginBottom: 8,
   },
@@ -78,28 +78,28 @@ const styles = StyleSheet.create({
     width: 52,
     height: 52,
     borderRadius: 11,
-    overflow: 'hidden',
-    backgroundColor: '#2A3155',
-    alignItems: 'center',
-    justifyContent: 'center',
+    overflow: "hidden",// 
+    backgroundColor: "#2A3155",
+    alignItems: "center",
+    justifyContent: "center",
   },
   coverImg: {
-    width: '100%',
-    height: '100%',
+    width: "100%",
+    height: "100%",
   },
   infoWrap: {
     flex: 1,
     minWidth: 0,
-    justifyContent: 'center',
+    justifyContent: "center",
   },
   topRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
+    flexDirection: "row",
+    justifyContent: "space-between",
     gap: 8,
   },
   title: {
     fontSize: 14,
-    fontWeight: '700',
+    fontWeight: "700",
     color: COLORS.text,
   },
   meta: {
@@ -108,30 +108,30 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   actionRow: {
-    flexDirection: 'row',
+    flexDirection: "row",
     gap: 4,
-    alignItems: 'center',
+    alignItems: "center",
   },
-  actionBtn: {
+  actionBtn: {//play
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    alignItems: 'center',
-    justifyContent: 'center',
+    backgroundColor: "rgba(255,255,255,0.08)",
+    alignItems: "center",
+    justifyContent: "center",
   },
   actionBtnTransparent: {
     width: 28,
     height: 28,
     borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+    alignItems: "center",
+    justifyContent: "center",
   },
   reasonText: {
     marginTop: 8,
     fontSize: 12,
     color: COLORS.faint,
     lineHeight: 17,
-    fontStyle: 'italic',
+    fontStyle: "italic",
   },
 });

@@ -1,53 +1,48 @@
-import React, { useState, useMemo } from 'react';
+import { COLORS, moodById, Track, TRACK_POOL } from "@/constants/moodflow";
+import { AIParsedResult } from "@/services/ai-prompt-parser";
+import { audioSynth } from "@/services/audio-service";
+import { generateJourney, Journey, Stage } from "@/services/journey-generator";
+import React, { useMemo, useState } from "react";
 import {
-  View,
-  Text,
   Pressable,
   ScrollView,
   StyleSheet,
+  Text,
   useWindowDimensions,
-} from 'react-native';
-import {
-  COLORS,
-  TRACK_POOL,
-  moodById,
-  Track,
-} from '@/constants/moodflow';
-import { generateJourney, Journey, Stage } from '@/services/journey-generator';
-import { AIParsedResult } from '@/services/ai-prompt-parser';
-import { audioSynth } from '@/services/audio-service';
+  View,
+} from "react-native";
 
 // Shared Layout Components
-import Icon from '@/components/moodflow/shared/Icon';
-import Sidebar from '@/components/moodflow/shared/Sidebar';
-import MobileNav from '@/components/moodflow/shared/MobileNav';
-import AmbientGlow from '@/components/moodflow/shared/AmbientGlow';
+import AmbientGlow from "@/components/moodflow/shared/AmbientGlow";
+import Icon from "@/components/moodflow/shared/Icon";
+import MobileNav from "@/components/moodflow/shared/MobileNav";
+import Sidebar from "@/components/moodflow/shared/Sidebar";
 
 // Feature Pages
-import HomePage from '@/components/moodflow/home/HomePage';
-import JourneyPage from '@/components/moodflow/journey/JourneyPage';
-import MusicDNAPage from '@/components/moodflow/music-dna/MusicDNAPage';
-import DiscoverPage from '@/components/moodflow/discover/DiscoverPage';
-import MyMusicPage from '@/components/moodflow/my-music/MyMusicPage';
-import CommunityPage from '@/components/moodflow/community/CommunityPage';
-import StatisticsPage from '@/components/moodflow/statistics/StatisticsPage';
-import SettingsPage from '@/components/moodflow/settings/SettingsPage';
+import CommunityPage from "@/components/moodflow/community/CommunityPage";
+import DiscoverPage from "@/components/moodflow/discover/DiscoverPage";
+import HomePage from "@/components/moodflow/home/HomePage";
+import JourneyPage from "@/components/moodflow/journey/JourneyPage";
+import MusicDNAPage from "@/components/moodflow/music-dna/MusicDNAPage";
+import MyMusicPage from "@/components/moodflow/my-music/MyMusicPage";
+import SettingsPage from "@/components/moodflow/settings/SettingsPage";
+import StatisticsPage from "@/components/moodflow/statistics/StatisticsPage";
 
 // Modals & Player
-import BottomPlayer from '@/components/moodflow/player/BottomPlayer';
-import NowPlayingModal from '@/components/moodflow/player/NowPlayingModal';
-import AIAssistantModal from '@/components/moodflow/ai-assistant/AIAssistantModal';
-import GeneratingModal from '@/components/moodflow/ai-assistant/GeneratingModal';
+//import BottomPlayer from '@/components/moodflow/player/BottomPlayer';
+import AIAssistantModal from "@/components/moodflow/ai-assistant/AIAssistantModal";
+import GeneratingModal from "@/components/moodflow/ai-assistant/GeneratingModal";
+import NowPlayingModal from "@/components/moodflow/player/NowPlayingModal";
 
 // Auth Screen
-import AuthScreen from '@/app/auth';
+import AuthScreen from "@/app/auth";
 
 export default function MoodFlowMain() {
   const [authed, setAuthed] = useState(true);
-  const [userName, setUserName] = useState('Lợi');
+  const [userName, setUserName] = useState("Lợi");
 
   // App Navigation & Responsive
-  const [page, setPage] = useState('home');
+  const [page, setPage] = useState("home");
   const [collapsed, setCollapsed] = useState(false);
   const { width } = useWindowDimensions();
   const isDesktop = width >= 900;
@@ -60,29 +55,29 @@ export default function MoodFlowMain() {
 
   // App State: Mood selection & generated journey
   const [state, setState] = useState({
-    moodFrom: 'anxious',
-    moodTo: 'focus',
-    activity: 'coding',
+    moodFrom: "anxious",
+    moodTo: "focus",
+    activity: "coding",
     duration: 120,
   });
 
   const [journey, setJourney] = useState<Journey | null>(() =>
     generateJourney({
-      moodFrom: moodById('anxious'),
-      moodTo: moodById('focus'),
-      activity: 'coding',
+      moodFrom: moodById("anxious"),
+      moodTo: moodById("focus"),
+      activity: "coding",
       duration: 120,
-    })
+    }),
   );
 
   // Music Playback state
   const [nowPlaying, setNowPlaying] = useState<Track | null>(
-    () => TRACK_POOL.focus[0]
+    () => TRACK_POOL.focus[0],
   );
   const [stageInfo, setStageInfo] = useState({
     index: 0,
     total: 4,
-    title: 'Focus',
+    title: "Focus",
   });
   const [playing, setPlaying] = useState(false);
 
@@ -107,7 +102,7 @@ export default function MoodFlowMain() {
           });
           setJourney(j);
           setIsGenerating(false);
-          setPage('journey');
+          setPage("journey");
           const first = j.stages[0]?.tracks[0];
           if (first) {
             setNowPlaying(first);
@@ -125,7 +120,11 @@ export default function MoodFlowMain() {
     }, 600);
   };
 
-  const handlePlayTrack = (track: Track, stage?: Stage, stageIndex?: number) => {
+  const handlePlayTrack = (
+    track: Track,
+    stage?: Stage,
+    stageIndex?: number,
+  ) => {
     setNowPlaying(track);
     if (stage && stageIndex !== undefined && journey) {
       setStageInfo({
@@ -162,7 +161,7 @@ export default function MoodFlowMain() {
   // Switch page content
   const pageContent = useMemo(() => {
     switch (page) {
-      case 'home':
+      case "home":
         return (
           <HomePage
             state={state}
@@ -171,7 +170,7 @@ export default function MoodFlowMain() {
             userName={userName}
           />
         );
-      case 'journey':
+      case "journey":
         return (
           <JourneyPage
             journey={journey}
@@ -179,17 +178,17 @@ export default function MoodFlowMain() {
             onPlayTrack={handlePlayTrack}
           />
         );
-      case 'dna':
+      case "dna":
         return <MusicDNAPage />;
-      case 'discover':
+      case "discover":
         return <DiscoverPage />;
-      case 'mymusic':
+      case "mymusic":
         return <MyMusicPage onPlayTrack={handlePlayTrack} />;
-      case 'community':
+      case "community":
         return <CommunityPage />;
-      case 'stats':
+      case "stats":
         return <StatisticsPage />;
-      case 'settings':
+      case "settings":
         return (
           <SettingsPage
             onLogout={() => {
@@ -215,7 +214,7 @@ export default function MoodFlowMain() {
     return (
       <AuthScreen
         onAuthSuccess={(name) => {
-          setUserName(name || 'Lợi');
+          setUserName(name || "Lợi");
           setAuthed(true);
         }}
       />
@@ -250,7 +249,13 @@ export default function MoodFlowMain() {
           showsVerticalScrollIndicator={false}
         >
           {/* Top Quick Logout Button */}
-          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', marginBottom: 14 }}>
+          <View
+            style={{
+              flexDirection: "row",
+              justifyContent: "flex-end",
+              marginBottom: 14,
+            }}
+          >
             <Pressable onPress={handleLogout} style={styles.topLogoutBtn}>
               <Icon name="logout" size={14} color={COLORS.danger} />
               <Text style={styles.topLogoutText}>Đăng xuất</Text>
@@ -267,21 +272,16 @@ export default function MoodFlowMain() {
       )}
 
       {/* Floating AI Assistant Button & Popover */}
-      <AIAssistantModal
-        open={aiOpen}
-        setOpen={setAiOpen}
-        applyFromAI={applyFromAI}
-        currentMood={currentMood}
-      />
+      {page !== "mymusic" && (
+        <AIAssistantModal
+          open={aiOpen}
+          setOpen={setAiOpen}
+          applyFromAI={applyFromAI}
+          currentMood={currentMood}
+        />
+      )}
 
       {/* Persistent Bottom Music Player */}
-      <BottomPlayer
-        nowPlaying={nowPlaying}
-        playing={playing}
-        setPlaying={handleTogglePlay}
-        stageInfo={stageInfo}
-        onOpenNowPlaying={() => setNowPlayingModal(true)}
-      />
 
       {/* Full-Screen Now Playing Experience Modal */}
       {nowPlayingModal && (
@@ -297,10 +297,7 @@ export default function MoodFlowMain() {
 
       {/* Generating 5-Step Animation Modal */}
       {isGenerating && (
-        <GeneratingModal
-          stepIndex={generationStep}
-          currentMood={currentMood}
-        />
+        <GeneratingModal stepIndex={generationStep} currentMood={currentMood} />
       )}
     </View>
   );
@@ -310,12 +307,12 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: COLORS.bg,
-    position: 'relative',
-    overflow: 'hidden',
+    position: "relative",
+    overflow: "hidden",
   },
   body: {
     flex: 1,
-    flexDirection: 'row',
+    flexDirection: "row",
   },
   mainScroll: {
     flex: 1,
@@ -326,19 +323,19 @@ const styles = StyleSheet.create({
     paddingTop: 20,
   },
   topLogoutBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
+    flexDirection: "row",
+    alignItems: "center",
     gap: 6,
     paddingVertical: 6,
     paddingHorizontal: 12,
     borderRadius: 8,
-    backgroundColor: 'rgba(251, 113, 133, 0.1)',
+    backgroundColor: "rgba(251, 113, 133, 0.1)",
     borderWidth: 1,
-    borderColor: 'rgba(251, 113, 133, 0.3)',
+    borderColor: "rgba(251, 113, 133, 0.3)",
   },
   topLogoutText: {
     color: COLORS.danger,
     fontSize: 12.5,
-    fontWeight: '700',
+    fontWeight: "700",
   },
 });
