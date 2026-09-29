@@ -1,27 +1,28 @@
-const express = require('express');
-const cors = require('cors');
-require('dotenv').config();
+const path = require("node:path");
+const express = require("express");
+const cors = require("cors");
 
-const authRoutes = require('./router/authRoutes');
-const userRoutes = require('./router/userRoutes');
+require("dotenv").config({
+  path: path.join(path.dirname(process.argv[1]), ".env"),
+});
+
+const authRoutes = require("./authRoutes");
 
 const app = express();
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "10kb" }));
+app.use("/api/auth", authRoutes);
 
-app.use('/api/auth', authRoutes);
-app.use('/api/users', userRoutes);
-
-app.get('/', (req, res) => {
-    res.json({
-        success: true,
-        message: 'API đang chạy'
-    });
+app.get("/", (req, res) => {
+  res.json({
+    success: true,
+    message: "API đang chạy",
+  });
 });
 
-const PORT = process.env.PORT || 3000;
+const port = process.env.PORT || 3000;
 
-app.listen(PORT, () => {
-    console.log(`Server đang chạy tại http://localhost:${PORT}`);
+app.listen(port, () => {
+  console.log(`Server đang chạy tại http://localhost:${port}`);
 });
