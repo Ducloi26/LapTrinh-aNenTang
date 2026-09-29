@@ -48,3 +48,5 @@ CLAUDE.md
 .claude/
 .gemini/
 *.plan.md
+package-lock.json
+package.json
