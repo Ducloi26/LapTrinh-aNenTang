@@ -30,10 +30,23 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# local env files (tuyệt đối không push lên git)
 .env
-.env.local
-.env*.local
+.env*
+**/.env
+**/.env*
+*.local
+
+# Tài liệu kế hoạch & word (không push lên git)
+*.docx
+*.doc
+KE_HOACH_CHI_TIET.*
+THIET_KE_*
+
+# Database & scripts phụ trợ (không push lên git)
+DATABASE_SCHEMA*
+supabase/
+scripts/
 
 # typescript
 *.tsbuildinfo
@@ -43,5 +56,6 @@ example
 # generated native folders
 /ios
 /android
+
 
 

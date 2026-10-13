@@ -41,10 +41,35 @@ import GeneratingModal from '@/components/moodflow/ai-assistant/GeneratingModal'
 
 // Auth Screen
 import AuthScreen from '@/app/auth';
+import { supabase } from '@/lib/supabase';
+import { getCurrentUserProfile } from '@/services/mood-service';
 
 export default function MoodFlowMain() {
   const [authed, setAuthed] = useState(true);
-  const [userName, setUserName] = useState('Lợi');
+  const [userName, setUserName] = useState('Người nghe');
+
+  // Kiểm tra session và tải hồ sơ người dùng thực tế từ Backend Supabase
+  React.useEffect(() => {
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setAuthed(true);
+        getCurrentUserProfile().then((prof) => {
+          if (prof?.displayName) setUserName(prof.displayName);
+        });
+      }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setAuthed(true);
+        getCurrentUserProfile().then((prof) => {
+          if (prof?.displayName) setUserName(prof.displayName);
+        });
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
 
   // App Navigation & Responsive
   const [page, setPage] = useState('home');
@@ -60,18 +85,18 @@ export default function MoodFlowMain() {
 
   // App State: Mood selection & generated journey
   const [state, setState] = useState({
-    moodFrom: 'anxious',
-    moodTo: 'focus',
-    activity: 'coding',
-    duration: 120,
+    moodFrom: 'deep_focus',
+    moodTo: 'calm_unwind',
+    activity: 'deep_work',
+    duration: 30,
   });
 
   const [journey, setJourney] = useState<Journey | null>(() =>
     generateJourney({
-      moodFrom: moodById('anxious'),
-      moodTo: moodById('focus'),
-      activity: 'coding',
-      duration: 120,
+      moodFrom: moodById('deep_focus'),
+      moodTo: moodById('calm_unwind'),
+      activity: 'deep_work',
+      duration: 30,
     })
   );
 
@@ -168,6 +193,7 @@ export default function MoodFlowMain() {
             state={state}
             setState={setState}
             onCreateJourney={() => triggerGenerateJourney()}
+            onOpenAI={() => setAiOpen(true)}
             userName={userName}
           />
         );
@@ -204,7 +230,10 @@ export default function MoodFlowMain() {
     }
   }, [page, state, journey, userName, playing]);
 
-  const handleLogout = () => {
+  const handleLogout = async () => {
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {}
     audioSynth.pause();
     setPlaying(false);
     setAuthed(false);

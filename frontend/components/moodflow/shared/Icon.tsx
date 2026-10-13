@@ -62,6 +62,10 @@ export default function Icon({
       alert: <g><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></g>,
       arrowright: <g><line x1="5" x2="19" y1="12" y2="12"/><polyline points="12 5 19 12 12 19"/></g>,
       maximize: <g><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" x2="14" y1="3" y2="10"/><line x1="3" x2="10" y1="21" y2="14"/></g>,
+      laptop: <g><rect width="18" height="12" x="3" y="4" rx="2"/><line x1="2" x2="22" y1="20" y2="20"/></g>,
+      flower: <g><circle cx="12" cy="12" r="3"/><path d="M12 16.5A4.5 4.5 0 1 1 7.5 12"/><path d="M12 7.5A4.5 4.5 0 1 1 16.5 12"/><path d="M7.5 12A4.5 4.5 0 1 1 12 7.5"/><path d="M16.5 12A4.5 4.5 0 1 1 12 16.5"/></g>,
+      activity: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>,
+      moon: <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>,
     };
 
     const SvgElement = 'svg' as any;

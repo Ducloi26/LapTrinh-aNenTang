@@ -29,9 +29,16 @@ export default function MusicCard({ track, onPlay }: MusicCardProps) {
             <Text style={styles.title} numberOfLines={1}>
               {track.title}
             </Text>
-            <Text style={styles.meta} numberOfLines={1}>
-              {track.artist} · {track.genre} · {track.duration}
-            </Text>
+            <View style={styles.metaRow}>
+              <Text style={styles.meta} numberOfLines={1}>
+                {track.artist} · {track.genre} · {track.duration}
+              </Text>
+              {track.bpm ? (
+                <View style={styles.bpmBadge}>
+                  <Text style={styles.bpmText}>🥁 {track.bpm} BPM</Text>
+                </View>
+              ) : null}
+            </View>
           </View>
 
           <View style={styles.actionRow}>
@@ -53,6 +60,13 @@ export default function MusicCard({ track, onPlay }: MusicCardProps) {
             </Pressable>
           </View>
         </View>
+
+        {/* Psychological effect */}
+        {track.psychologicalEffect ? (
+          <View style={styles.effectBadge}>
+            <Text style={styles.effectText}>🧠 {track.psychologicalEffect}</Text>
+          </View>
+        ) : null}
 
         {/* Reason */}
         {track.reason ? (
@@ -105,7 +119,41 @@ const styles = StyleSheet.create({
   meta: {
     fontSize: 12.5,
     color: COLORS.muted,
-    marginTop: 2,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 3,
+    flexWrap: 'wrap',
+  },
+  bpmBadge: {
+    backgroundColor: 'rgba(34, 211, 238, 0.12)',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.25)',
+  },
+  bpmText: {
+    fontSize: 11,
+    color: '#22D3EE',
+    fontWeight: '700',
+  },
+  effectBadge: {
+    marginTop: 6,
+    backgroundColor: 'rgba(168, 85, 247, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.25)',
+    alignSelf: 'flex-start',
+  },
+  effectText: {
+    fontSize: 11.5,
+    color: '#C084FC',
+    fontWeight: '500',
   },
   actionRow: {
     flexDirection: 'row',
@@ -128,10 +176,10 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   reasonText: {
-    marginTop: 8,
-    fontSize: 12,
+    marginTop: 6,
+    fontSize: 11.5,
     color: COLORS.faint,
-    lineHeight: 17,
+    lineHeight: 16,
     fontStyle: 'italic',
   },
 });
