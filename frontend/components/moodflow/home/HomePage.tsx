@@ -12,6 +12,7 @@ import {
   ACTIVITIES,
   DURATIONS,
   moodById,
+  JourneySelection,
 } from '@/constants/moodflow';
 import SectionTitle from '@/components/moodflow/shared/SectionTitle';
 import GhostButton from '@/components/moodflow/shared/GhostButton';
@@ -21,22 +22,11 @@ import ActivityCard from '@/components/moodflow/home/ActivityCard';
 import JourneyLine from '@/components/moodflow/home/JourneyLine';
 
 interface HomePageProps {
-  state: {
-    moodFrom: string;
-    moodTo: string;
-    activity: string;
-    duration: number;
-  };
-  setState: React.Dispatch<
-    React.SetStateAction<{
-      moodFrom: string;
-      moodTo: string;
-      activity: string;
-      duration: number;
-    }>
-  >;
+  state: JourneySelection;
+  setState: React.Dispatch<React.SetStateAction<JourneySelection>>;
   onCreateJourney: () => void;
   onOpenAI?: () => void;
+  aiReady: boolean;
   userName?: string;
 }
 
@@ -45,6 +35,7 @@ export default function HomePage({
   setState,
   onCreateJourney,
   onOpenAI,
+  aiReady,
   userName,
 }: HomePageProps) {
   const currentMood = moodById(state.moodFrom);
@@ -64,7 +55,7 @@ export default function HomePage({
 
       {/* Thanh gọi nhanh Trợ lý AI Assistant */}
       {onOpenAI && (
-        <Pressable onPress={onOpenAI} style={styles.aiQuickBox}>
+        <Pressable onPress={onOpenAI} disabled={!aiReady} accessibilityRole="button" style={styles.aiQuickBox}>
           <LinearGradient
             colors={['rgba(99, 102, 241, 0.16)', 'rgba(236, 72, 153, 0.12)']}
             start={{ x: 0, y: 0 }}

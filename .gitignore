@@ -40,6 +40,7 @@ backend/data/
 data/
 
 # Tài liệu kế hoạch & word (không push lên git)
+/THONG_KE_CHUC_NANG_DA_LAM/
 *.docx
 *.doc
 KE_HOACH_CHI_TIET.*

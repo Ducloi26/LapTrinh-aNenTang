@@ -77,7 +77,7 @@ export default function MusicDNAPage() {
             MOOD YÊU THÍCH
           </Text>
           <View style={styles.tagWrap}>
-            {['calm', 'focus', 'dreamy'].map((id) => {
+            {['calm_unwind', 'deep_focus', 'night_serenade'].map((id) => {
               const m = moodById(id);
               return (
                 <View key={id} style={styles.moodTag}>

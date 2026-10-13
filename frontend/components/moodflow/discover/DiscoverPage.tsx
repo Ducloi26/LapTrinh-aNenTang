@@ -8,32 +8,32 @@ const DISCOVER_SECTIONS = [
   {
     title: 'Vì bạn đang cảm thấy bình tĩnh',
     reason: 'Phù hợp với gu Indie + R&B của bạn.',
-    moodId: 'calm',
+    moodId: 'calm_unwind',
   },
   {
     title: 'Hoàn hảo cho việc lập trình',
     reason: 'Năng lượng vừa phải, không lời, giúp giữ nhịp tập trung.',
-    moodId: 'focus',
+    moodId: 'deep_focus',
   },
   {
     title: 'Hành trình tiếp theo dành cho bạn',
     reason: 'Dựa trên hành trình bạn hoàn thành gần nhất.',
-    moodId: 'dreamy',
+    moodId: 'night_serenade',
   },
   {
     title: 'Những bài hát bạn có thể chưa biết',
     reason: 'Nằm ngoài gu quen thuộc nhưng gần với Music DNA của bạn.',
-    moodId: 'romantic',
+    moodId: 'creative_spark',
   },
   {
     title: 'Music Journey đang thịnh hành',
     reason: 'Được cộng đồng MoodFlow lưu nhiều nhất tuần này.',
-    moodId: 'energetic',
+    moodId: 'energy_boost',
   },
   {
     title: 'Người có Music DNA giống bạn',
     reason: '82% trùng khớp về thể loại và mood.',
-    moodId: 'happy',
+    moodId: 'euphoric_bliss',
   },
 ];
 

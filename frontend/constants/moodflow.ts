@@ -12,9 +12,21 @@ export const COLORS = {
 };
 
 export type GradientColors = readonly [string, string, ...string[]];
+export type MoodId = 'deep_focus' | 'calm_unwind' | 'energy_boost' | 'heartbreak_healing'
+  | 'creative_spark' | 'melancholy_chill' | 'euphoric_bliss' | 'night_serenade';
+export type ActivityId = 'deep_work' | 'meditation' | 'workout' | 'sleep';
+export type StageKey = 'acknowledge' | 'transition' | 'elevate' | 'transcendence';
+export type DurationMinutes = 15 | 30 | 45 | 60;
+
+export interface JourneySelection {
+  moodFrom: MoodId;
+  moodTo: MoodId;
+  activity: ActivityId;
+  duration: DurationMinutes;
+}
 
 export interface Mood {
-  id: string;
+  id: MoodId;
   emoji: string;
   label: string;
   colors: GradientColors;
@@ -34,37 +46,26 @@ export const MOODS: Mood[] = [
   { id: 'night_serenade', emoji: '🌙', label: 'Giai điệu đêm khuya', colors: ['#312E81', '#7C3AED', '#C4B5FD'], line: 'Đưa giấc ngủ và màn đêm về với bình yên.', targetEnergy: 15, targetValence: 45 },
 ];
 
-export const moodById = (id: string): Mood => {
-  // Map tương thích ngược nếu còn id cũ
-  const aliasMap: Record<string, string> = {
-    anxious: 'heartbreak_healing',
-    calm: 'calm_unwind',
-    focus: 'deep_focus',
-    energetic: 'energy_boost',
-    dreamy: 'night_serenade',
-    romantic: 'creative_spark',
-    happy: 'euphoric_bliss',
-    sad: 'melancholy_chill',
-  };
-  const targetId = aliasMap[id] || id;
-  return MOODS.find((m) => m.id === targetId) || MOODS[0];
-};
+const moodsById = new Map<string, Mood>(MOODS.map((mood) => [mood.id, mood]));
+export const moodById = (id: string): Mood => moodsById.get(id) ?? MOODS[0];
 
 export interface Activity {
-  id: string;
+  id: ActivityId;
   label: string;
   icon: string;
+  bpmRange: readonly [number, number];
+  allowLyrics: boolean;
 }
 
 export const ACTIVITIES: Activity[] = [
-  { id: 'deep_work', label: 'Làm việc sâu', icon: 'laptop' },
-  { id: 'meditation', label: 'Thiền định', icon: 'flower' },
-  { id: 'workout', label: 'Tập luyện', icon: 'activity' },
-  { id: 'sleep', label: 'Giấc ngủ', icon: 'moon' },
+  { id: 'deep_work', label: 'Làm việc sâu', icon: 'laptop', bpmRange: [60, 100], allowLyrics: true },
+  { id: 'meditation', label: 'Thiền định', icon: 'flower', bpmRange: [40, 70], allowLyrics: false },
+  { id: 'workout', label: 'Tập luyện', icon: 'activity', bpmRange: [120, 170], allowLyrics: true },
+  { id: 'sleep', label: 'Giấc ngủ', icon: 'moon', bpmRange: [40, 60], allowLyrics: false },
 ];
 
 export interface DurationOption {
-  id: number;
+  id: DurationMinutes;
   label: string;
 }
 
@@ -108,7 +109,7 @@ export interface Track {
   reason?: string;
 }
 
-export const TRACK_POOL: Record<string, Track[]> = {
+export const TRACK_POOL: Record<StageKey, Track[]> = {
   acknowledge: [
     { title: 'Chậm Lại Một Nhịp', artist: 'Vũ & Minh Đinh', genre: 'Indie Pop', energy: 28, bpm: 68, psychologicalEffect: 'Đồng điệu nỗi buồn, giải tỏa cortisol căng thẳng', duration: '3:45', cover: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=300&auto=format&fit=crop&q=80' },
     { title: 'Mưa Đầu Mùa', artist: 'Thái Đinh', genre: 'Acoustic Ballad', energy: 32, bpm: 72, psychologicalEffect: 'Thấu cảm cảm xúc, kích hoạt sóng Alpha êm dịu', duration: '4:10', cover: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=300&auto=format&fit=crop&q=80' },
@@ -131,20 +132,12 @@ export const TRACK_POOL: Record<string, Track[]> = {
   ],
 };
 
-// Bí danh tương thích ngược để không bị lỗi undefined ở các màn hình cũ
-TRACK_POOL.focus = TRACK_POOL.acknowledge;
-TRACK_POOL.calmdown = TRACK_POOL.transition;
-TRACK_POOL.deepfocus = TRACK_POOL.elevate;
-TRACK_POOL.cooldown = TRACK_POOL.transcendence;
-TRACK_POOL.energize = TRACK_POOL.elevate;
-TRACK_POOL.romantic = TRACK_POOL.transition;
-
 export interface StageTemplate {
-  key: string;
+  key: StageKey;
   emoji: string;
   title: string;
   subtitle: string;
-  pool: string;
+  pool: StageKey;
   share: number;
 }
 
@@ -187,13 +180,19 @@ export const JOURNEY_4_STAGES: StageTemplate[] = [
   },
 ];
 
-// Giữ lại alias STAGE_TEMPLATES để bảo toàn tương thích ngược
-export const STAGE_TEMPLATES: Record<string, StageTemplate[]> = {
-  toFocus: JOURNEY_4_STAGES,
-  toCalm: JOURNEY_4_STAGES,
-  toEnergetic: JOURNEY_4_STAGES,
-  toRomantic: JOURNEY_4_STAGES,
-};
+const moodIds = new Set<string>(MOODS.map((mood) => mood.id));
+const activityIds = new Set<string>(ACTIVITIES.map((activity) => activity.id));
+const durationMinutes = new Set<number>(DURATIONS.map((duration) => duration.id));
+const stageKeys = new Set<string>(JOURNEY_4_STAGES.map((stage) => stage.key));
+
+export const isMoodId = (value: unknown): value is MoodId =>
+  typeof value === 'string' && moodIds.has(value);
+export const isActivityId = (value: unknown): value is ActivityId =>
+  typeof value === 'string' && activityIds.has(value);
+export const isDurationMinutes = (value: unknown): value is DurationMinutes =>
+  typeof value === 'number' && durationMinutes.has(value);
+export const isStageKey = (value: unknown): value is StageKey =>
+  typeof value === 'string' && stageKeys.has(value);
 
 export const GENRES = [
   'V-Pop', 'K-Pop', 'US-UK', 'EDM', 'Lofi', 'R&B',

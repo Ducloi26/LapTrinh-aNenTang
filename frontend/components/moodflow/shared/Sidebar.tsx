@@ -113,7 +113,7 @@ export default function Sidebar({
         ]}
       >
         <LinearGradient
-          colors={moodById('dreamy').colors}
+          colors={moodById('night_serenade').colors}
           style={styles.userAvatar}
         >
           <Text style={styles.userInitial}>

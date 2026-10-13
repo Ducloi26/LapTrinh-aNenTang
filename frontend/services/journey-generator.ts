@@ -4,11 +4,13 @@ import {
   JOURNEY_4_STAGES,
   TRACK_POOL,
   ACTIVITIES,
-  StageTemplate,
+  ActivityId,
+  DurationMinutes,
+  StageKey,
 } from '@/constants/moodflow';
 
 export interface Stage {
-  key: string;
+  key: StageKey;
   emoji: string;
   title: string;
   subtitle: string;
@@ -27,10 +29,12 @@ export interface Journey {
 }
 
 export function fmtMin(total: number): string {
-  const h = Math.floor(total / 60);
-  const m = Math.round(total % 60);
-  if (h > 0) return `${h} giờ ${m > 0 ? m + ' phút' : ''}`.trim();
-  return `${m} phút`;
+  const totalSeconds = Math.round(total * 60);
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = totalSeconds % 60;
+  return [h && `${h} giờ`, m && `${m} phút`, s && `${s} giây`]
+    .filter(Boolean).join(' ') || '0 phút';
 }
 
 /**
@@ -38,7 +42,7 @@ export function fmtMin(total: number): string {
  */
 export function reasonFor(
   track: Track,
-  activityId: string,
+  activityId: ActivityId,
   moodFrom: Mood,
   moodTo: Mood,
   stageIndex: number
@@ -70,16 +74,20 @@ export function reasonFor(
 export function generateJourney(params: {
   moodFrom: Mood;
   moodTo: Mood;
-  activity: string;
-  duration: number;
+  activity: ActivityId;
+  duration: DurationMinutes;
 }): Journey {
   const { moodFrom, moodTo, activity, duration } = params;
+  const totalSeconds = duration * 60;
   let t = 0;
 
   const stages: Stage[] = JOURNEY_4_STAGES.map((tpl, i) => {
-    const stageMin = Math.max(3, Math.round(duration * tpl.share));
+    const stageSeconds = i === JOURNEY_4_STAGES.length - 1
+      ? totalSeconds - t
+      : Math.round(totalSeconds * tpl.share);
+    const stageMin = stageSeconds / 60;
     const start = t;
-    t += stageMin;
+    t += stageSeconds;
     const pool = TRACK_POOL[tpl.pool] || TRACK_POOL.acknowledge;
     
     // Mỗi giai đoạn chọn từ 1 đến 2 bài hát phù hợp thời lượng
@@ -101,9 +109,9 @@ export function generateJourney(params: {
       emoji: tpl.emoji,
       title: tpl.title,
       subtitle: tpl.subtitle,
-      range: `${fmtMin(start)} – ${fmtMin(t)}`,
-      startMin: start,
-      endMin: t,
+      range: `${fmtMin(start / 60)} – ${fmtMin(t / 60)}`,
+      startMin: start / 60,
+      endMin: t / 60,
       tracks,
     };
   });
@@ -112,7 +120,7 @@ export function generateJourney(params: {
 
   return {
     stages,
-    totalMin: t,
+    totalMin: t / 60,
     moodFrom,
     moodTo,
     activityLabel: act ? act.label : 'Tự do',

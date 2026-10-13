@@ -7,13 +7,16 @@ import {
   StyleSheet,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, Mood, moodById, ACTIVITIES } from '@/constants/moodflow';
+import {
+  COLORS, Mood, moodById, ACTIVITIES, isMoodId, isActivityId, isDurationMinutes,
+} from '@/constants/moodflow';
 import Icon from '@/components/moodflow/shared/Icon';
 import { parsePrompt, AIParsedResult } from '@/services/ai-prompt-parser';
 import { fmtMin } from '@/services/journey-generator';
 
 interface AIAssistantModalProps {
   open: boolean;
+  ready: boolean;
   setOpen: (o: boolean) => void;
   applyFromAI: (parsed: AIParsedResult) => void;
   currentMood: Mood;
@@ -21,22 +24,33 @@ interface AIAssistantModalProps {
 
 export default function AIAssistantModal({
   open,
+  ready,
   setOpen,
   applyFromAI,
   currentMood,
 }: AIAssistantModalProps) {
   const [input, setInput] = useState('');
   const [parsed, setParsed] = useState<AIParsedResult | null>(null);
+  const [error, setError] = useState('');
 
   const handleSend = () => {
     if (!input.trim()) return;
-    setParsed(parsePrompt(input));
+    setError('');
+    try {
+      setParsed(parsePrompt(input));
+    } catch {
+      setParsed(null);
+      setError('Không thể xử lý lựa chọn. Vui lòng thử lại.');
+    }
   };
 
   if (!open) {
     return (
       <Pressable
         onPress={() => setOpen(true)}
+        disabled={!ready}
+        accessibilityRole="button"
+        accessibilityLabel="Mở trợ lý AI"
         style={[
           styles.floatingBtn,
           {
@@ -62,7 +76,7 @@ export default function AIAssistantModal({
           <Icon name="sparkles" size={16} color="#67E8F9" />
           <Text style={styles.popoverTitle}>MoodFlow AI</Text>
         </View>
-        <Pressable onPress={() => setOpen(false)} style={styles.closeBtn}>
+        <Pressable onPress={() => setOpen(false)} accessibilityRole="button" accessibilityLabel="Đóng trợ lý AI" style={styles.closeBtn}>
           <Icon name="close" size={16} color={COLORS.faint} />
         </Pressable>
       </View>
@@ -101,10 +115,16 @@ export default function AIAssistantModal({
 
             <Pressable
               onPress={() => {
+                if (!isMoodId(parsed.mood) || !isMoodId(parsed.goal)
+                  || !isActivityId(parsed.activity) || !isDurationMinutes(parsed.duration)) {
+                  setError('Lựa chọn không hợp lệ. Vui lòng thử lại.');
+                  return;
+                }
                 applyFromAI(parsed);
                 setOpen(false);
                 setParsed(null);
                 setInput('');
+                setError('');
               }}
               style={styles.applyBtnWrap}
             >
@@ -117,12 +137,14 @@ export default function AIAssistantModal({
             </Pressable>
           </View>
         )}
+        {error ? <Text accessibilityRole="alert" style={{ color: COLORS.danger }}>{error}</Text> : null}
       </View>
 
       {/* Input row */}
       <View style={styles.inputRow}>
         <TextInput
           value={input}
+          maxLength={1000}
           onChangeText={setInput}
           onSubmitEditing={handleSend}
           placeholder="Tao đang mệt, cần học 2 tiếng..."

@@ -12,6 +12,7 @@ import {
   TRACK_POOL,
   moodById,
   Track,
+  JourneySelection,
 } from '@/constants/moodflow';
 import { generateJourney, Journey, Stage } from '@/services/journey-generator';
 import { AIParsedResult } from '@/services/ai-prompt-parser';
@@ -91,12 +92,17 @@ export default function MoodFlowMain() {
 
   // Modals & Assistant
   const [aiOpen, setAiOpen] = useState(false);
+  const [aiReady, setAiReady] = useState(false);
   const [nowPlayingModal, setNowPlayingModal] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStep, setGenerationStep] = useState(0);
 
+  React.useEffect(() => {
+    setAiReady(true);
+  }, []);
+
   // App State: Mood selection & generated journey
-  const [state, setState] = useState({
+  const [state, setState] = useState<JourneySelection>({
     moodFrom: 'deep_focus',
     moodTo: 'calm_unwind',
     activity: 'deep_work',
@@ -206,6 +212,7 @@ export default function MoodFlowMain() {
             setState={setState}
             onCreateJourney={() => triggerGenerateJourney()}
             onOpenAI={() => setAiOpen(true)}
+            aiReady={aiReady}
             userName={userName}
           />
         );
@@ -240,7 +247,7 @@ export default function MoodFlowMain() {
       default:
         return null;
     }
-  }, [page, state, journey, userName, playing]);
+  }, [page, state, journey, userName, playing, aiReady]);
 
   const handleLogout = async () => {
     if (typeof localStorage !== 'undefined') {
@@ -314,6 +321,7 @@ export default function MoodFlowMain() {
       {/* Floating AI Assistant Button & Popover */}
       <AIAssistantModal
         open={aiOpen}
+        ready={aiReady}
         setOpen={setAiOpen}
         applyFromAI={applyFromAI}
         currentMood={currentMood}
