@@ -49,28 +49,19 @@ export default function RegisterForm({ moodColors, onSwitchToLogin, onRegisterSu
       const data = await res.json();
 
       if (!res.ok || !data.success) {
-        throw new Error(data.error || 'Đăng ký không thành công.');
+        setAuthError(data.error || 'Đăng ký không thành công.');
+        return;
       }
 
-      if (data.session) {
-        await supabase.auth.setSession(data.session);
+      // 2. Lưu JWT Token và hồ sơ người dùng cục bộ
+      if (data.token && typeof localStorage !== 'undefined') {
+        localStorage.setItem('moodflow_token', data.token);
+        localStorage.setItem('moodflow_user', JSON.stringify(data.user));
       }
+
       onRegisterSuccess();
     } catch (err: any) {
-      // Fallback: Gọi trực tiếp Supabase Cloud nếu máy chủ Backend chưa bật
-      const { error } = await supabase.auth.signUp({
-        email,
-        password,
-        options: { data: { display_name: name } },
-      });
-
-      if (error) {
-        setAuthError(error.message === 'User already registered'
-          ? 'Email này đã được đăng ký. Vui lòng đăng nhập.'
-          : (err.message || 'Không thể tạo tài khoản. Vui lòng thử lại.'));
-      } else {
-        onRegisterSuccess();
-      }
+      setAuthError(err.message || 'Không thể kết nối đến máy chủ Backend.');
     } finally {
       setLoading(false);
     }

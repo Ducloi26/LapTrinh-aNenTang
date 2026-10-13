@@ -2,6 +2,9 @@ const express = require('express');
 const cors = require('cors');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+const bcrypt = require('bcryptjs');
+const jwt = require('jsonwebtoken');
 const { createClient } = require('@supabase/supabase-js');
 
 // 1. Tải cấu hình từ file .env (kiểm tra thư mục hiện tại hoặc thư mục cha)
@@ -24,19 +27,20 @@ if (fs.existsSync(envPath)) {
   });
 }
 
-// 2. Khởi tạo Supabase client
+// 2. Khởi tạo Supabase client (dùng để lưu trữ CSDL)
 const supabase = (supabaseUrl && supabaseAnonKey) 
   ? createClient(supabaseUrl, supabaseAnonKey) 
   : null;
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+const JWT_SECRET = process.env.JWT_SECRET || 'moodflow_jwt_secret_token_key_2026';
 
 // 3. Middlewares
 app.use(cors());
 app.use(express.json());
 
-// Middleware ghi log đẹp mắt trên terminal cho mỗi request
+// Ghi log terminal đẹp mắt cho mỗi lượt gọi
 app.use((req, res, next) => {
   const start = Date.now();
   res.on('finish', () => {
@@ -48,16 +52,88 @@ app.use((req, res, next) => {
 });
 
 // ==========================================
-// 4. CÁC API ENDPOINTS
+// 4. QUẢN LÝ TÀI KHOẢN ĐỘC LẬP (BCRYPT + CSDL)
+// ==========================================
+
+// Kho lưu trữ dự phòng nếu bảng app_users chưa tạo trong CSDL
+const dataDir = path.resolve(__dirname, 'data');
+if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
+const usersFile = path.resolve(dataDir, 'users.json');
+if (!fs.existsSync(usersFile)) fs.writeFileSync(usersFile, '[]', 'utf8');
+
+function getLocalUsers() {
+  try {
+    return JSON.parse(fs.readFileSync(usersFile, 'utf8'));
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveLocalUsers(users) {
+  try {
+    fs.writeFileSync(usersFile, JSON.stringify(users, null, 2), 'utf8');
+  } catch (e) {}
+}
+
+async function findUserByEmail(email) {
+  const normEmail = email.toLowerCase().trim();
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('app_users')
+        .select('*')
+        .eq('email', normEmail)
+        .maybeSingle();
+      if (!error && data) return data;
+    } catch (e) {}
+  }
+  const locals = getLocalUsers();
+  return locals.find(u => u.email.toLowerCase() === normEmail) || null;
+}
+
+async function createUser({ email, passwordHash, displayName }) {
+  const normEmail = email.toLowerCase().trim();
+  const newUser = {
+    id: crypto.randomUUID(),
+    email: normEmail,
+    password_hash: passwordHash,
+    display_name: displayName || 'Người nghe',
+    created_at: new Date().toISOString(),
+  };
+
+  if (supabase) {
+    try {
+      const { data, error } = await supabase
+        .from('app_users')
+        .insert({
+          id: newUser.id,
+          email: newUser.email,
+          password_hash: newUser.password_hash,
+          display_name: newUser.display_name,
+        })
+        .select()
+        .single();
+      if (!error && data) return data;
+    } catch (e) {}
+  }
+
+  // Lưu file dự phòng
+  const locals = getLocalUsers();
+  locals.push(newUser);
+  saveLocalUsers(locals);
+  return newUser;
+}
+
+// ==========================================
+// 5. CÁC API ENDPOINTS
 // ==========================================
 
 /**
  * [GET] /api/health
- * Kiểm tra trạng thái máy chủ và kết nối cơ sở dữ liệu Supabase
+ * Kiểm tra trạng thái máy chủ
  */
 app.get('/api/health', async (req, res) => {
   let dbStatus = 'Chưa kết nối';
-  let dbDetails = null;
 
   if (supabase) {
     try {
@@ -74,12 +150,13 @@ app.get('/api/health', async (req, res) => {
 
   res.json({
     success: true,
-    message: 'Máy chủ Backend MoodFlow đang chạy ổn định!',
+    message: 'Máy chủ Backend MoodFlow đang chạy ổn định (Bcrypt & JWT Active)!',
     timestamp: new Date().toISOString(),
     service: 'MoodFlow API Server',
     port: PORT,
+    authMethod: 'Bcrypt Password Hashing + JWT Token (Independent)',
     database: {
-      provider: 'Supabase Cloud',
+      provider: 'Supabase Cloud PostgreSQL',
       url: supabaseUrl || 'Không tìm thấy URL',
       status: dbStatus,
     }
@@ -88,93 +165,121 @@ app.get('/api/health', async (req, res) => {
 
 /**
  * [POST] /api/auth/register
- * Tiếp nhận yêu cầu đăng ký tài khoản từ Frontend
+ * Backend tự mã hóa mật khẩu bằng BCRYPT và tự cấp JWT TOKEN
  */
 app.post('/api/auth/register', async (req, res) => {
   const { email, password, name } = req.body;
 
   if (!email || !password) {
-    return res.status(400).json({ success: false, error: 'Vui lòng cung cấp email và mật khẩu!' });
-  }
-
-  if (!supabase) {
-    return res.status(500).json({ success: false, error: 'Chưa cấu hình Supabase Client trên Backend.' });
+    return res.status(400).json({
+      success: false,
+      error: 'Vui lòng cung cấp đầy đủ email và mật khẩu!'
+    });
   }
 
   try {
-    console.log(`\n📥 [YÊU CẦU BACKEND] Đang xử lý đăng ký tài khoản mới: ${email}...`);
-    const { data, error } = await supabase.auth.signUp({
+    // 1. Kiểm tra tài khoản đã tồn tại hay chưa
+    const existing = await findUserByEmail(email);
+    if (existing) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email này đã được đăng ký tài khoản. Vui lòng chuyển sang Đăng nhập.'
+      });
+    }
+
+    // 2. Backend tự mã hóa mật khẩu bằng BCRYPT
+    const salt = await bcrypt.genSalt(10);
+    const passwordHash = await bcrypt.hash(password, salt);
+
+    // 3. Lưu tài khoản vào CSDL (bảng app_users)
+    const user = await createUser({
       email,
-      password,
-      options: {
-        data: { display_name: name || 'Người nghe' }
-      }
+      passwordHash,
+      displayName: name || 'Người nghe'
     });
 
-    if (error) {
-      console.error(`❌ [LỖI ĐĂNG KÝ] ${error.message}`);
-      return res.status(400).json({ success: false, error: error.message });
-    }
+    // 4. Backend tự tạo mã JWT Token (hạn dùng 7 ngày)
+    const token = jwt.sign(
+      { id: user.id, email: user.email, name: user.display_name },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
 
-    // Tự động chèn hồ sơ vào bảng profiles nếu có user id
-    if (data.user?.id) {
-      const { error: profErr } = await supabase.from('profiles').upsert({
-        id: data.user.id,
-        display_name: name || 'Người nghe',
-      });
-      if (profErr) {
-        console.warn(`⚠️ [CẢNH BÁO PROFILE] Không thể chèn profile: ${profErr.message}`);
-      }
-    }
-
-    console.log(`✅ [THÀNH CÔNG] Đã tạo tài khoản cho: ${email} (Tên: ${name || 'Người nghe'})\n`);
+    console.log('\n==========================================================');
+    console.log('👤 [BACKEND AUTH] ĐĂNG KÝ TÀI KHOẢN MỚI THÀNH CÔNG!');
+    console.log(`📧 Email:        ${user.email}`);
+    console.log(`🏷️ Tên:          ${user.display_name}`);
+    console.log(`🔒 Mật khẩu băm: ${passwordHash.substring(0, 22)}... (Bcrypt)`);
+    console.log(`🎟️ JWT Token:    ${token.substring(0, 25)}... (7 ngày)`);
+    console.log('==========================================================\n');
 
     res.json({
       success: true,
       message: 'Đăng ký tài khoản thành công qua máy chủ Backend!',
-      user: data.user,
-      session: data.session
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        displayName: user.display_name,
+      }
     });
   } catch (err) {
-    console.error(`❌ [NGOẠI LỆ ĐĂNG KÝ] ${err.message}`);
+    console.error('❌ [LỖI ĐĂNG KÝ BACKEND]', err.message);
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
 /**
  * [POST] /api/auth/login
- * Tiếp nhận yêu cầu đăng nhập từ Frontend
+ * Backend tự so khớp mật khẩu BCRYPT và cấp JWT TOKEN
  */
 app.post('/api/auth/login', async (req, res) => {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    return res.status(400).json({ success: false, error: 'Vui lòng cung cấp email và mật khẩu!' });
-  }
-
-  if (!supabase) {
-    return res.status(500).json({ success: false, error: 'Chưa cấu hình Supabase Client.' });
+    return res.status(400).json({
+      success: false,
+      error: 'Vui lòng cung cấp email và mật khẩu!'
+    });
   }
 
   try {
-    console.log(`\n📥 [YÊU CẦU BACKEND] Đang xác thực đăng nhập: ${email}...`);
-    const { data, error } = await supabase.auth.signInWithPassword({
-      email,
-      password
-    });
-
-    if (error) {
-      console.error(`❌ [LỖI ĐĂNG NHẬP] ${error.message}`);
-      return res.status(400).json({ success: false, error: error.message });
+    // 1. Tìm người dùng theo email
+    const user = await findUserByEmail(email);
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        error: 'Tài khoản không tồn tại. Vui lòng kiểm tra lại email.'
+      });
     }
 
-    console.log(`✅ [THÀNH CÔNG] Người dùng ${email} đã đăng nhập thành công!\n`);
+    // 2. So khớp mật khẩu với mã băm Bcrypt
+    const isMatch = await bcrypt.compare(password, user.password_hash);
+    if (!isMatch) {
+      return res.status(400).json({
+        success: false,
+        error: 'Mật khẩu không chính xác. Vui lòng thử lại!'
+      });
+    }
+
+    // 3. Backend tự cấp JWT Token
+    const token = jwt.sign(
+      { id: user.id, email: user.email, name: user.display_name },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    console.log(`\n🔑 [BACKEND AUTH] ĐĂNG NHẬP THÀNH CÔNG: ${user.email} (Tên: ${user.display_name})\n`);
 
     res.json({
       success: true,
       message: 'Đăng nhập thành công qua máy chủ Backend!',
-      user: data.user,
-      session: data.session
+      token,
+      user: {
+        id: user.id,
+        email: user.email,
+        displayName: user.display_name,
+      }
     });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -183,27 +288,25 @@ app.post('/api/auth/login', async (req, res) => {
 
 /**
  * [GET] /api/profiles
- * Lấy danh sách tài khoản hồ sơ người dùng đã đăng ký
+ * Lấy danh sách hồ sơ người dùng đã đăng ký
  */
 app.get('/api/profiles', async (req, res) => {
-  if (!supabase) {
-    return res.status(500).json({ success: false, error: 'Chưa cấu hình Supabase Client.' });
+  let list = [];
+  if (supabase) {
+    try {
+      const { data } = await supabase.from('app_users').select('id, email, display_name, created_at');
+      if (data && data.length > 0) list = data;
+    } catch (e) {}
   }
-
-  try {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('*')
-      .order('created_at', { ascending: false });
-
-    if (error) {
-      return res.status(400).json({ success: false, error: error.message });
-    }
-
-    res.json({ success: true, count: data.length, data });
-  } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+  if (list.length === 0) {
+    list = getLocalUsers().map(u => ({
+      id: u.id,
+      email: u.email,
+      display_name: u.display_name,
+      created_at: u.created_at
+    }));
   }
+  res.json({ success: true, count: list.length, data: list });
 });
 
 /**
@@ -222,7 +325,6 @@ app.get('/api/moods', async (req, res) => {
       .order('display_order', { ascending: true });
 
     if (error) {
-      console.error('❌ Lỗi lấy danh sách tâm trạng:', error.message);
       return res.status(400).json({ success: false, error: error.message });
     }
 
@@ -248,7 +350,6 @@ app.get('/api/activities', async (req, res) => {
       .order('display_order', { ascending: true });
 
     if (error) {
-      console.error('❌ Lỗi lấy danh sách hoạt động:', error.message);
       return res.status(400).json({ success: false, error: error.message });
     }
 
@@ -260,7 +361,7 @@ app.get('/api/activities', async (req, res) => {
 
 /**
  * [GET] /api/tracks
- * Lấy danh sách bài hát và phân tích đặc trưng âm nhạc (BPM, Energy, Valence)
+ * Lấy danh sách bài hát và đặc trưng âm nhạc
  */
 app.get('/api/tracks', async (req, res) => {
   if (!supabase) {
@@ -289,7 +390,6 @@ app.get('/api/tracks', async (req, res) => {
       .limit(50);
 
     if (error) {
-      console.error('❌ Lỗi lấy danh sách bài hát:', error.message);
       return res.status(400).json({ success: false, error: error.message });
     }
 
@@ -299,76 +399,18 @@ app.get('/api/tracks', async (req, res) => {
   }
 });
 
-/**
- * [POST] /api/journeys/generate
- * Thuật toán tạo hành trình âm nhạc 4 giai đoạn khoa học
- */
-app.post('/api/journeys/generate', async (req, res) => {
-  const { mood_id, activity_id, duration_minutes = 30 } = req.body;
-
-  if (!mood_id || !activity_id) {
-    return res.status(400).json({
-      success: false,
-      error: 'Vui lòng cung cấp đầy đủ mood_id và activity_id'
-    });
-  }
-
-  // 4 giai đoạn chuẩn hóa khoa học
-  const stages = [
-    {
-      order: 1,
-      code: 'acknowledge',
-      title: 'Khởi đầu & Thấu cảm',
-      subtitle: 'Đồng điệu cùng trạng thái cảm xúc hiện tại của bạn',
-      percentage: 20
-    },
-    {
-      order: 2,
-      code: 'transition',
-      title: 'Chuyển tiếp',
-      subtitle: 'Nhẹ nhàng chuyển hóa năng lượng và nhịp sinh học',
-      percentage: 30
-    },
-    {
-      order: 3,
-      code: 'elevate',
-      title: 'Nâng đỡ',
-      subtitle: 'Đưa tâm trí tiến dần về trạng thái năng lượng tối ưu',
-      percentage: 30
-    },
-    {
-      order: 4,
-      code: 'transcendence',
-      title: 'Thăng hoa & An định',
-      subtitle: 'Đạt đỉnh thư thái hoặc tập trung tuyệt đối bền vững',
-      percentage: 20
-    }
-  ];
-
-  res.json({
-    success: true,
-    message: 'Tạo hành trình 4 giai đoạn thành công!',
-    journey: {
-      mood_id,
-      activity_id,
-      duration_minutes,
-      total_stages: 4,
-      stages
-    }
-  });
-});
-
-// 5. Khởi động Server
+// 6. Khởi động Server
 app.listen(PORT, () => {
   console.log('\n==========================================================');
   console.log('🚀 MÁY CHỦ BACKEND MOODFLOW ĐÃ KHỞI CHẠY THÀNH CÔNG!');
   console.log('==========================================================');
   console.log(`📡 Địa chỉ cục bộ:     http://localhost:${PORT}`);
   console.log(`🩺 Kiểm tra trạng thái: http://localhost:${PORT}/api/health`);
+  console.log(`🔐 Cơ chế xác thực:   BCRYPT HASHING + JWT TOKEN (ĐỘC LẬP) ✅`);
   console.log(`🎭 Danh sách tâm trạng: http://localhost:${PORT}/api/moods`);
   console.log(`🏃 Danh sách hoạt động: http://localhost:${PORT}/api/activities`);
   console.log(`🎵 Danh sách bài hát:   http://localhost:${PORT}/api/tracks`);
-  console.log(`🔗 Kết nối Supabase:   ${supabaseUrl ? 'ĐÃ SẴN SÀNG ✅' : 'CHƯA CÓ KEY ❌'}`);
+  console.log(`👥 Danh sách tài khoản: http://localhost:${PORT}/api/profiles`);
   console.log('==========================================================');
   console.log('💡 Nhấn phím Ctrl + C để dừng máy chủ bất cứ lúc nào.\n');
 });

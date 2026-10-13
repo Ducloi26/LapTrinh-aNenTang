@@ -48,8 +48,20 @@ export default function MoodFlowMain() {
   const [authed, setAuthed] = useState(true);
   const [userName, setUserName] = useState('Người nghe');
 
-  // Kiểm tra session và tải hồ sơ người dùng thực tế từ Backend Supabase
+  // Kiểm tra session từ Backend JWT hoặc Supabase Cloud
   React.useEffect(() => {
+    if (typeof localStorage !== 'undefined') {
+      const savedUser = localStorage.getItem('moodflow_user');
+      const savedToken = localStorage.getItem('moodflow_token');
+      if (savedToken && savedUser) {
+        try {
+          const u = JSON.parse(savedUser);
+          if (u?.displayName) setUserName(u.displayName);
+          setAuthed(true);
+        } catch (e) {}
+      }
+    }
+
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setAuthed(true);
@@ -231,6 +243,10 @@ export default function MoodFlowMain() {
   }, [page, state, journey, userName, playing]);
 
   const handleLogout = async () => {
+    if (typeof localStorage !== 'undefined') {
+      localStorage.removeItem('moodflow_token');
+      localStorage.removeItem('moodflow_user');
+    }
     try {
       await supabase.auth.signOut();
     } catch (e) {}

@@ -36,6 +36,8 @@ yarn-error.*
 **/.env
 **/.env*
 *.local
+backend/data/
+data/
 
 # Tài liệu kế hoạch & word (không push lên git)
 *.docx
