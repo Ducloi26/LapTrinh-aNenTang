@@ -4,6 +4,7 @@
   "description": "MoodFlow - Ứng dụng Trị liệu Âm nhạc Cá nhân hóa Đa nền tảng",
   "private": true,
   "scripts": {
+    "install:all": "npm install && npm install --prefix backend && npm install --prefix frontend",
     "dev": "npm run dev --prefix backend",
     "backend": "npm run dev --prefix backend",
     "web": "npm run web --prefix frontend",

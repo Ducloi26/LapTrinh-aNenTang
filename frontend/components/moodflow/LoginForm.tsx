@@ -15,7 +15,7 @@ import { supabase } from '@/lib/supabase';
 interface Props {
   moodColors: GradientColors;
   onSwitchToRegister: () => void;
-  onLoginSuccess: () => void;
+  onLoginSuccess: (name?: string) => void;
 }
 
 export default function LoginForm({ moodColors, onSwitchToRegister, onLoginSuccess }: Props) {
@@ -55,7 +55,7 @@ export default function LoginForm({ moodColors, onSwitchToRegister, onLoginSucce
         localStorage.setItem('moodflow_user', JSON.stringify(data.user));
       }
 
-      onLoginSuccess();
+      onLoginSuccess(data.user?.displayName || 'Người nghe');
     } catch (err: any) {
       setAuthError(err.message || 'Không thể kết nối đến máy chủ Backend.');
     } finally {
