@@ -1,9 +1,14 @@
 import { COLORS, moodById, Track, TRACK_POOL } from "@/constants/moodflow";
 import { AIParsedResult } from "@/services/ai-prompt-parser";
 import { audioSynth } from "@/services/audio-service";
-import { generateJourney, Journey, Stage } from "@/services/journey-generator";
-import React, { useMemo, useState } from "react";
 import {
+  presetForMoodActivity,
+  SynthPresetId,
+} from "@/services/audio-presets";
+import { generateJourney, Journey, Stage } from "@/services/journey-generator";
+import React, { useEffect, useMemo, useState } from "react";
+import {
+  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -17,6 +22,7 @@ import AmbientGlow from "@/components/moodflow/shared/AmbientGlow";
 import Icon from "@/components/moodflow/shared/Icon";
 import MobileNav from "@/components/moodflow/shared/MobileNav";
 import Sidebar from "@/components/moodflow/shared/Sidebar";
+import BottomPlayer from "@/components/moodflow/player/BottomPlayer";
 
 // Feature Pages
 import CommunityPage from "@/components/moodflow/community/CommunityPage";
@@ -29,7 +35,6 @@ import SettingsPage from "@/components/moodflow/settings/SettingsPage";
 import StatisticsPage from "@/components/moodflow/statistics/StatisticsPage";
 
 // Modals & Player
-//import BottomPlayer from '@/components/moodflow/player/BottomPlayer';
 import AIAssistantModal from "@/components/moodflow/ai-assistant/AIAssistantModal";
 import GeneratingModal from "@/components/moodflow/ai-assistant/GeneratingModal";
 import NowPlayingModal from "@/components/moodflow/player/NowPlayingModal";
@@ -80,8 +85,77 @@ export default function MoodFlowMain() {
     title: "Focus",
   });
   const [playing, setPlaying] = useState(false);
+  const [presetId, setPresetId] = useState<SynthPresetId>("deep-work");
+  const [volume, setVolume] = useState(0.55);
+  const [audioError, setAudioError] = useState<string | null>(null);
 
   const currentMood = moodById(state.moodFrom);
+
+  const reportAudioError = (error: unknown) => {
+    setAudioError(
+      error instanceof Error ? error.message : "Không thể khởi tạo bộ phát âm thanh.",
+    );
+    setPlaying(false);
+  };
+
+  const startSynth = async (nextPreset = presetId) => {
+    try {
+      await audioSynth.play(nextPreset);
+      setAudioError(null);
+      setPlaying(true);
+    } catch (error) {
+      reportAudioError(error);
+    }
+  };
+
+  const stopSynth = async () => {
+    try {
+      await audioSynth.stop();
+      setAudioError(null);
+    } catch (error) {
+      reportAudioError(error);
+    } finally {
+      setPlaying(false);
+    }
+  };
+
+  const changePreset = async (nextPreset: SynthPresetId) => {
+    setPresetId(nextPreset);
+    try {
+      await audioSynth.setPreset(nextPreset);
+      setAudioError(null);
+    } catch (error) {
+      reportAudioError(error);
+    }
+  };
+
+  useEffect(() => {
+    const nextPreset = presetForMoodActivity(state.moodTo, state.activity);
+    setPresetId(nextPreset);
+    void audioSynth.setPreset(nextPreset).then(() => {
+      setAudioError(null);
+    }).catch((error: unknown) => {
+      setAudioError(
+        error instanceof Error
+          ? error.message
+          : "Không thể đổi preset âm thanh.",
+      );
+      setPlaying(false);
+    });
+  }, [state.moodTo, state.activity]);
+
+  useEffect(() => {
+    return () => {
+      void audioSynth.stop().catch((error: unknown) => {
+        console.error("Failed to release Web Audio resources", error);
+      });
+    };
+  }, []);
+
+  const changeVolume = (nextVolume: number) => {
+    setVolume(nextVolume);
+    audioSynth.setVolume(nextVolume);
+  };
 
   // Trigger Journey Generation with 5-step animation
   const triggerGenerateJourney = (customState?: typeof state) => {
@@ -111,8 +185,7 @@ export default function MoodFlowMain() {
               total: j.stages.length,
               title: j.stages[0].title,
             });
-            setPlaying(true);
-            audioSynth.play();
+            void startSynth();
           }
         }, 500);
         return prev;
@@ -133,17 +206,16 @@ export default function MoodFlowMain() {
         title: stage.title,
       });
     }
-    setPlaying(true);
-    audioSynth.play();
+    void startSynth();
   };
 
   const handleTogglePlay = () => {
     if (playing) {
-      audioSynth.pause();
-      setPlaying(false);
+      void audioSynth.pause().then(() => {
+        setPlaying(false);
+      }).catch(reportAudioError);
     } else {
-      audioSynth.play();
-      setPlaying(true);
+      void startSynth();
     }
   };
 
@@ -192,8 +264,19 @@ export default function MoodFlowMain() {
         return (
           <SettingsPage
             onLogout={() => {
-              audioSynth.pause();
-              setAuthed(false);
+              void audioSynth.stop().then(() => {
+                setAudioError(null);
+                setPlaying(false);
+                setAuthed(false);
+              }).catch((error: unknown) => {
+                setAudioError(
+                  error instanceof Error
+                    ? error.message
+                    : "Không thể dừng bộ phát âm thanh.",
+                );
+                setPlaying(false);
+                setAuthed(false);
+              });
             }}
             userName={userName}
           />
@@ -204,9 +287,7 @@ export default function MoodFlowMain() {
   }, [page, state, journey, userName, playing]);
 
   const handleLogout = () => {
-    audioSynth.pause();
-    setPlaying(false);
-    setAuthed(false);
+    void stopSynth().finally(() => setAuthed(false));
   };
 
   // If user is not logged in, render AuthScreen
@@ -282,6 +363,21 @@ export default function MoodFlowMain() {
       )}
 
       {/* Persistent Bottom Music Player */}
+      {Platform.OS === "web" && (
+        <BottomPlayer
+          nowPlaying={nowPlaying}
+          playing={playing}
+          presetId={presetId}
+          volume={volume}
+          bottomOffset={isDesktop ? 0 : 60}
+          error={audioError}
+          onTogglePlay={handleTogglePlay}
+          onStop={() => void stopSynth()}
+          onVolumeChange={changeVolume}
+          onPresetChange={(nextPreset) => void changePreset(nextPreset)}
+          onOpenNowPlaying={() => setNowPlayingModal(true)}
+        />
+      )}
 
       {/* Full-Screen Now Playing Experience Modal */}
       {nowPlayingModal && (
