@@ -369,23 +369,50 @@ app.get('/api/profiles', async (req, res) => {
 
 /**
  * [POST] /api/journeys
- * Lưu hành trình âm nhạc 4 giai đoạn vào CSDL
+ * Lưu hành trình âm nhạc 4 giai đoạn vào CSDL (gắn chặt với user_id của người dùng)
  */
 app.post('/api/journeys', async (req, res) => {
-  const { title, moodFrom, moodTo, activity, duration, stages, userId } = req.body;
+  const { title, moodFrom, moodTo, activity, duration, stages, userId, userName } = req.body;
 
   if (!stages || !Array.isArray(stages)) {
     return res.status(400).json({ success: false, error: 'Dữ liệu hành trình không hợp lệ.' });
   }
 
+  // Trích xuất User ID từ JWT Token hoặc từ body
+  let effectiveUserId = userId || 'guest';
+  let effectiveUserName = userName || 'Người nghe';
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+      if (decoded?.id) effectiveUserId = decoded.id;
+      if (decoded?.name) effectiveUserName = decoded.name;
+    } catch (e) {}
+  }
+
+  // Tính BPM trung bình để phục vụ thuật toán đề xuất nhạc
+  let totalBpm = 0;
+  let countBpm = 0;
+  stages.forEach(stg => {
+    stg.tracks?.forEach(t => {
+      if (t.bpm) {
+        totalBpm += t.bpm;
+        countBpm++;
+      }
+    });
+  });
+  const avgBpm = countBpm > 0 ? Math.round(totalBpm / countBpm) : 80;
+
   const newJourney = {
     id: crypto.randomUUID(),
     title: title || `${moodFrom?.label || 'Tâm trạng'} ➔ ${moodTo?.label || 'Mục tiêu'}`,
-    user_id: userId || 'guest',
+    user_id: effectiveUserId,
+    user_name: effectiveUserName,
     mood_from: moodFrom?.id || 'deep_focus',
     mood_to: moodTo?.id || 'calm_unwind',
     activity: activity || 'deep_work',
     duration_minutes: duration || 30,
+    avg_bpm: avgBpm,
     total_stages: stages.length,
     stages: stages,
     created_at: new Date().toISOString(),
@@ -396,6 +423,7 @@ app.post('/api/journeys', async (req, res) => {
     try {
       await supabase.from('journeys').insert({
         id: newJourney.id,
+        user_id: effectiveUserId !== 'guest' ? effectiveUserId : null,
         title: newJourney.title,
         duration_minutes: newJourney.duration_minutes,
       });
@@ -409,8 +437,9 @@ app.post('/api/journeys', async (req, res) => {
 
   console.log('\n==========================================================');
   console.log('💾 [BACKEND CSDL] ĐÃ LƯU HÀNH TRÌNH 4 GIAI ĐOẠN VÀO CSDL!');
+  console.log(`👤 User ID:    ${effectiveUserId} (${effectiveUserName})`);
   console.log(`🎵 Tiêu đề:    ${newJourney.title}`);
-  console.log(`⏱️ Thời lượng: ${newJourney.duration_minutes} phút`);
+  console.log(`⏱️ Thời lượng: ${newJourney.duration_minutes} phút | BPM TB: ${avgBpm}`);
   console.log(`🎼 Cấu trúc:   4 giai đoạn khoa học (${stages.reduce((acc, s) => acc + (s.tracks?.length || 0), 0)} bài hát)`);
   console.log('==========================================================\n');
 
@@ -423,10 +452,27 @@ app.post('/api/journeys', async (req, res) => {
 
 /**
  * [GET] /api/journeys/my
- * Lấy danh sách toàn bộ hành trình người dùng đã lưu
+ * Lấy danh sách hành trình của người dùng đã lưu
  */
 app.get('/api/journeys/my', async (req, res) => {
-  const journeys = getLocalJourneys();
+  let targetUserId = req.query.userId;
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+      if (decoded?.id) targetUserId = decoded.id;
+    } catch (e) {}
+  }
+
+  let journeys = getLocalJourneys();
+  // Nếu có user_id cụ thể, ưu tiên lọc theo user_id
+  if (targetUserId && targetUserId !== 'guest') {
+    const userOnly = journeys.filter(j => j.user_id === targetUserId);
+    if (userOnly.length > 0) {
+      journeys = userOnly;
+    }
+  }
+
   res.json({
     success: true,
     count: journeys.length,
@@ -450,31 +496,46 @@ app.delete('/api/journeys/:id', async (req, res) => {
 
 /**
  * [POST] /api/tracks/like
- * Thả tim / Bỏ thích bài hát
+ * Thả tim / Bỏ thích bài hát (gắn với user_id của người dùng)
  */
 app.post('/api/tracks/like', (req, res) => {
-  const { track } = req.body;
-  if (!track || !track.id) {
+  const { track, userId } = req.body;
+  if (!track || (!track.id && !track.title)) {
     return res.status(400).json({ success: false, error: 'Thiếu thông tin bài hát.' });
   }
 
+  let effectiveUserId = userId || 'guest';
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+      if (decoded?.id) effectiveUserId = decoded.id;
+    } catch (e) {}
+  }
+
   const likedTracks = getLocalLikedTracks();
-  const existingIndex = likedTracks.findIndex(t => t.id === track.id || (t.title === track.title && t.artist === track.artist));
+  const trackId = track.id || `${track.title}-${track.artist}`;
+  const existingIndex = likedTracks.findIndex(t => 
+    (t.id === trackId || (t.title === track.title && t.artist === track.artist)) &&
+    (t.user_id === effectiveUserId || effectiveUserId === 'guest')
+  );
 
   let isLiked = false;
   if (existingIndex >= 0) {
     // Đã thích -> Bỏ thích
     likedTracks.splice(existingIndex, 1);
     isLiked = false;
-    console.log(`🤍 [BỎ THÍCH BÀI HÁT] ${track.title} - ${track.artist}`);
+    console.log(`🤍 [BỎ THÍCH BÀI HÁT] User ${effectiveUserId}: ${track.title} - ${track.artist}`);
   } else {
     // Thích bài hát
     likedTracks.unshift({
       ...track,
+      id: trackId,
+      user_id: effectiveUserId,
       liked_at: new Date().toISOString(),
     });
     isLiked = true;
-    console.log(`❤️ [THÍCH BÀI HÁT] ${track.title} - ${track.artist} (${track.bpm ? track.bpm + ' BPM' : ''})`);
+    console.log(`❤️ [THÍCH BÀI HÁT] User ${effectiveUserId}: ${track.title} - ${track.artist} (${track.bpm ? track.bpm + ' BPM' : ''})`);
   }
 
   saveLocalLikedTracks(likedTracks);
@@ -488,14 +549,77 @@ app.post('/api/tracks/like', (req, res) => {
 
 /**
  * [GET] /api/tracks/liked
- * Lấy danh sách các bài hát đã thích
+ * Lấy danh sách các bài hát đã thích theo user_id
  */
 app.get('/api/tracks/liked', (req, res) => {
-  const likedTracks = getLocalLikedTracks();
+  let targetUserId = req.query.userId;
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+      if (decoded?.id) targetUserId = decoded.id;
+    } catch (e) {}
+  }
+
+  let likedTracks = getLocalLikedTracks();
+  if (targetUserId && targetUserId !== 'guest') {
+    const userOnly = likedTracks.filter(t => t.user_id === targetUserId);
+    if (userOnly.length > 0) {
+      likedTracks = userOnly;
+    }
+  }
+
   res.json({
     success: true,
     count: likedTracks.length,
     data: likedTracks,
+  });
+});
+
+/**
+ * [GET] /api/recommendations/dna
+ * Thuật toán đề xuất cá nhân hóa dựa trên lịch sử hành trình & bài hát của User
+ */
+app.get('/api/recommendations/dna', (req, res) => {
+  let targetUserId = req.query.userId;
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+      if (decoded?.id) targetUserId = decoded.id;
+    } catch (e) {}
+  }
+
+  const allJourneys = getLocalJourneys();
+  const allLiked = getLocalLikedTracks();
+
+  // Lọc dữ liệu của user này
+  const userJourneys = targetUserId && targetUserId !== 'guest' 
+    ? allJourneys.filter(j => j.user_id === targetUserId) 
+    : allJourneys;
+  const userLiked = targetUserId && targetUserId !== 'guest'
+    ? allLiked.filter(t => t.user_id === targetUserId)
+    : allLiked;
+
+  // Thống kê nhịp BPM ưa chuộng
+  let bpmSum = 0;
+  let bpmCount = 0;
+  userLiked.forEach(t => {
+    if (t.bpm) { bpmSum += t.bpm; bpmCount++; }
+  });
+  userJourneys.forEach(j => {
+    if (j.avg_bpm) { bpmSum += j.avg_bpm; bpmCount++; }
+  });
+  const preferredBpm = bpmCount > 0 ? Math.round(bpmSum / bpmCount) : 75;
+
+  res.json({
+    success: true,
+    userId: targetUserId || 'guest',
+    totalJourneys: userJourneys.length,
+    totalLikedTracks: userLiked.length,
+    preferredBpm: preferredBpm,
+    targetState: 'Alpha State (60-80 BPM)',
+    recommendationNote: `Dựa trên ${userJourneys.length} hành trình và ${userLiked.length} bài hát yêu thích, thuật toán MoodFlow đề xuất dải tần số phù hợp nhất với thể trạng của bạn.`
   });
 });
 

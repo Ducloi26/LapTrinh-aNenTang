@@ -159,11 +159,24 @@ export default function MoodFlowMain() {
             audioSynth.play();
           }
 
-          // TỰ ĐỘNG LƯU VÀO CSDL BACKEND KHI TẠO HÀNH TRÌNH
+          // TỰ ĐỘNG LƯU VÀO CSDL BACKEND KHI TẠO HÀNH TRÌNH (GẮN VỚI USER ID)
           try {
+            const token = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_token') : null;
+            const savedUserStr = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_user') : null;
+            let currentUserId = 'guest';
+            if (savedUserStr) {
+              try {
+                const u = JSON.parse(savedUserStr);
+                if (u?.id) currentUserId = u.id;
+              } catch (e) {}
+            }
+
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
             await fetch('http://localhost:5000/api/journeys', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers,
               body: JSON.stringify({
                 title: `${from.emoji} ${from.label} ➔ ${to.emoji} ${to.label}`,
                 moodFrom: from,
@@ -171,6 +184,7 @@ export default function MoodFlowMain() {
                 activity: j.activityLabel || activeState.activity,
                 duration: j.totalMin,
                 stages: j.stages,
+                userId: currentUserId,
                 userName: userName || 'Người nghe',
               }),
             });

@@ -73,9 +73,22 @@ export default function JourneyPage({
     // Chưa lưu -> Gửi lên Backend POST /api/journeys
     try {
       setSaving(true);
+      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_token') : null;
+      const savedUserStr = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_user') : null;
+      let currentUserId = 'guest';
+      if (savedUserStr) {
+        try {
+          const u = JSON.parse(savedUserStr);
+          if (u?.id) currentUserId = u.id;
+        } catch (e) {}
+      }
+
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const res = await fetch('http://localhost:5000/api/journeys', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           title: `${from.emoji} ${from.label} ➔ ${to.emoji} ${to.label}`,
           moodFrom: from,
@@ -83,6 +96,7 @@ export default function JourneyPage({
           activity: journey.activityLabel || state.moodFrom,
           duration: journey.totalMin,
           stages: journey.stages,
+          userId: currentUserId,
         }),
       });
 

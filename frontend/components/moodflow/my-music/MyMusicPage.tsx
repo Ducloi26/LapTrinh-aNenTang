@@ -53,7 +53,11 @@ export default function MyMusicPage({
   const fetchJourneys = async () => {
     try {
       setLoading(true);
-      const res = await fetch('http://localhost:5000/api/journeys/my');
+      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_token') : null;
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch('http://localhost:5000/api/journeys/my', { headers });
       const data = await res.json();
       if (data.success && Array.isArray(data.data)) {
         setJourneys(data.data);
@@ -68,7 +72,11 @@ export default function MyMusicPage({
   // 2. Tải danh sách bài hát đã thích từ CSDL Backend
   const fetchLikedTracks = async () => {
     try {
-      const res = await fetch('http://localhost:5000/api/tracks/liked');
+      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_token') : null;
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch('http://localhost:5000/api/tracks/liked', { headers });
       const data = await res.json();
       if (data.success && Array.isArray(data.data)) {
         setLikedTracks(data.data);
