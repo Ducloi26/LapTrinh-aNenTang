@@ -287,6 +287,32 @@ app.post('/api/auth/login', async (req, res) => {
 });
 
 /**
+ * [GET] /api/auth/me
+ * Lấy thông tin tài khoản đăng nhập hiện tại qua JWT Token
+ */
+app.get('/api/auth/me', (req, res) => {
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, error: 'Chưa cung cấp Token đăng nhập.' });
+  }
+
+  const token = authHeader.split(' ')[1];
+  try {
+    const decoded = jwt.verify(token, JWT_SECRET);
+    res.json({
+      success: true,
+      user: {
+        id: decoded.id,
+        email: decoded.email,
+        displayName: decoded.name,
+      }
+    });
+  } catch (err) {
+    res.status(401).json({ success: false, error: 'Token không hợp lệ hoặc đã hết hạn.' });
+  }
+});
+
+/**
  * [GET] /api/profiles
  * Lấy danh sách hồ sơ người dùng đã đăng ký
  */

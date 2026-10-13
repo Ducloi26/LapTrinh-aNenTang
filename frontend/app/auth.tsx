@@ -18,6 +18,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
   const { index: moodIndex, mood } = useMoodCycle();
   const [mode, setMode] = useState<'login' | 'register'>('login');
   const [status, setStatus] = useState<'idle' | 'success'>('idle');
+  const [authedUserName, setAuthedUserName] = useState('');
   const { width } = useWindowDimensions();
   const isWide = width >= 768;
 
@@ -28,7 +29,7 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
 
   const handleDismiss = () => {
     if (onAuthSuccess) {
-      onAuthSuccess('Lợi');
+      onAuthSuccess(authedUserName || undefined);
     } else {
       router.replace('/');
     }
@@ -62,13 +63,19 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
                 <LoginForm
                   moodColors={mood.colors}
                   onSwitchToRegister={() => handleSwitch('register')}
-                  onLoginSuccess={() => setStatus('success')}
+                  onLoginSuccess={(name) => {
+                    if (name) setAuthedUserName(name);
+                    setStatus('success');
+                  }}
                 />
               ) : (
                 <RegisterForm
                   moodColors={mood.colors}
                   onSwitchToLogin={() => handleSwitch('login')}
-                  onRegisterSuccess={() => setStatus('success')}
+                  onRegisterSuccess={(name) => {
+                    if (name) setAuthedUserName(name);
+                    setStatus('success');
+                  }}
                 />
               )}
             </>

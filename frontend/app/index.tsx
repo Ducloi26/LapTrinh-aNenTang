@@ -260,7 +260,7 @@ export default function MoodFlowMain() {
     return (
       <AuthScreen
         onAuthSuccess={(name) => {
-          setUserName(name || 'Lợi');
+          setUserName(name || 'Người nghe');
           setAuthed(true);
         }}
       />
