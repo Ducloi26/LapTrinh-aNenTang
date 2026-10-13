@@ -39,19 +39,40 @@ export default function RegisterForm({ moodColors, onSwitchToLogin, onRegisterSu
     setLoading(true);
     setAuthError(null);
 
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: { data: { display_name: name } },
-    });
+    try {
+      // 1. Gửi yêu cầu qua Backend Express API server (Port 5000)
+      const res = await fetch('http://localhost:5000/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, name }),
+      });
+      const data = await res.json();
 
-    setLoading(false);
-    if (error) {
-      setAuthError(error.message === 'User already registered'
-        ? 'Email này đã được đăng ký. Vui lòng đăng nhập.'
-        : 'Không thể tạo tài khoản. Vui lòng thử lại.');
-    } else {
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Đăng ký không thành công.');
+      }
+
+      if (data.session) {
+        await supabase.auth.setSession(data.session);
+      }
       onRegisterSuccess();
+    } catch (err: any) {
+      // Fallback: Gọi trực tiếp Supabase Cloud nếu máy chủ Backend chưa bật
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { display_name: name } },
+      });
+
+      if (error) {
+        setAuthError(error.message === 'User already registered'
+          ? 'Email này đã được đăng ký. Vui lòng đăng nhập.'
+          : (err.message || 'Không thể tạo tài khoản. Vui lòng thử lại.'));
+      } else {
+        onRegisterSuccess();
+      }
+    } finally {
+      setLoading(false);
     }
   };
 

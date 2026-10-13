@@ -87,6 +87,126 @@ app.get('/api/health', async (req, res) => {
 });
 
 /**
+ * [POST] /api/auth/register
+ * Tiếp nhận yêu cầu đăng ký tài khoản từ Frontend
+ */
+app.post('/api/auth/register', async (req, res) => {
+  const { email, password, name } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ success: false, error: 'Vui lòng cung cấp email và mật khẩu!' });
+  }
+
+  if (!supabase) {
+    return res.status(500).json({ success: false, error: 'Chưa cấu hình Supabase Client trên Backend.' });
+  }
+
+  try {
+    console.log(`\n📥 [YÊU CẦU BACKEND] Đang xử lý đăng ký tài khoản mới: ${email}...`);
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: {
+        data: { display_name: name || 'Người nghe' }
+      }
+    });
+
+    if (error) {
+      console.error(`❌ [LỖI ĐĂNG KÝ] ${error.message}`);
+      return res.status(400).json({ success: false, error: error.message });
+    }
+
+    // Tự động chèn hồ sơ vào bảng profiles nếu có user id
+    if (data.user?.id) {
+      const { error: profErr } = await supabase.from('profiles').upsert({
+        id: data.user.id,
+        display_name: name || 'Người nghe',
+      });
+      if (profErr) {
+        console.warn(`⚠️ [CẢNH BÁO PROFILE] Không thể chèn profile: ${profErr.message}`);
+      }
+    }
+
+    console.log(`✅ [THÀNH CÔNG] Đã tạo tài khoản cho: ${email} (Tên: ${name || 'Người nghe'})\n`);
+
+    res.json({
+      success: true,
+      message: 'Đăng ký tài khoản thành công qua máy chủ Backend!',
+      user: data.user,
+      session: data.session
+    });
+  } catch (err) {
+    console.error(`❌ [NGOẠI LỆ ĐĂNG KÝ] ${err.message}`);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * [POST] /api/auth/login
+ * Tiếp nhận yêu cầu đăng nhập từ Frontend
+ */
+app.post('/api/auth/login', async (req, res) => {
+  const { email, password } = req.body;
+
+  if (!email || !password) {
+    return res.status(400).json({ success: false, error: 'Vui lòng cung cấp email và mật khẩu!' });
+  }
+
+  if (!supabase) {
+    return res.status(500).json({ success: false, error: 'Chưa cấu hình Supabase Client.' });
+  }
+
+  try {
+    console.log(`\n📥 [YÊU CẦU BACKEND] Đang xác thực đăng nhập: ${email}...`);
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email,
+      password
+    });
+
+    if (error) {
+      console.error(`❌ [LỖI ĐĂNG NHẬP] ${error.message}`);
+      return res.status(400).json({ success: false, error: error.message });
+    }
+
+    console.log(`✅ [THÀNH CÔNG] Người dùng ${email} đã đăng nhập thành công!\n`);
+
+    res.json({
+      success: true,
+      message: 'Đăng nhập thành công qua máy chủ Backend!',
+      user: data.user,
+      session: data.session
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * [GET] /api/profiles
+ * Lấy danh sách tài khoản hồ sơ người dùng đã đăng ký
+ */
+app.get('/api/profiles', async (req, res) => {
+  if (!supabase) {
+    return res.status(500).json({ success: false, error: 'Chưa cấu hình Supabase Client.' });
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('profiles')
+      .select('*')
+      .order('created_at', { ascending: false });
+
+    if (error) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+
+    res.json({ success: true, count: data.length, data });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
  * [GET] /api/moods
  * Lấy danh sách 8 tâm trạng chuẩn hóa
  */

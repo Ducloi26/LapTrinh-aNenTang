@@ -35,13 +35,34 @@ export default function LoginForm({ moodColors, onSwitchToRegister, onLoginSucce
     setLoading(true);
     setAuthError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    try {
+      // 1. Gửi yêu cầu qua Backend Express API server (Port 5000)
+      const res = await fetch('http://localhost:5000/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
 
-    setLoading(false);
-    if (error) {
-      setAuthError('Email hoặc mật khẩu không đúng. Vui lòng thử lại.');
-    } else {
+      if (!res.ok || !data.success) {
+        throw new Error(data.error || 'Email hoặc mật khẩu không đúng.');
+      }
+
+      if (data.session) {
+        await supabase.auth.setSession(data.session);
+      }
       onLoginSuccess();
+    } catch (err: any) {
+      // Fallback: Gọi trực tiếp Supabase Cloud nếu máy chủ Backend chưa bật
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+
+      if (error) {
+        setAuthError('Email hoặc mật khẩu không đúng. Vui lòng thử lại.');
+      } else {
+        onLoginSuccess();
+      }
+    } finally {
+      setLoading(false);
     }
   };
 
