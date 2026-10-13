@@ -19,6 +19,8 @@ interface BottomPlayerProps {
   setPlaying: () => void;
   stageInfo?: { index: number; total: number; title: string };
   onOpenNowPlaying: () => void;
+  onNext?: () => void;
+  onPrev?: () => void;
 }
 
 export default function BottomPlayer({
@@ -27,6 +29,8 @@ export default function BottomPlayer({
   setPlaying,
   stageInfo,
   onOpenNowPlaying,
+  onNext,
+  onPrev,
 }: BottomPlayerProps) {
   const spinValue = useRef(new Animated.Value(0)).current;
 
@@ -87,7 +91,7 @@ export default function BottomPlayer({
       {/* Center Controls & Progress */}
       <View style={styles.centerSection}>
         <View style={styles.controlRow}>
-          <Pressable style={styles.iconBtn}>
+          <Pressable onPress={onPrev} style={styles.iconBtn}>
             <Icon name="skipback" size={16} color={COLORS.muted} />
           </Pressable>
           <Pressable onPress={setPlaying} style={styles.playBtn}>
@@ -97,7 +101,7 @@ export default function BottomPlayer({
               color="#0A0D16"
             />
           </Pressable>
-          <Pressable style={styles.iconBtn}>
+          <Pressable onPress={onNext} style={styles.iconBtn}>
             <Icon name="skipforward" size={16} color={COLORS.muted} />
           </Pressable>
           <SoundWave playing={playing} />

@@ -185,6 +185,48 @@ export default function MoodFlowMain() {
     }
   };
 
+  // Danh sách phẳng tất cả bài hát và giai đoạn trong Hành trình hiện tại
+  const allJourneyTracks = useMemo(() => {
+    if (!journey || !journey.stages) return [];
+    const list: { track: Track; stage: Stage; stageIndex: number }[] = [];
+    journey.stages.forEach((stg, sIdx) => {
+      stg.tracks?.forEach((trk) => {
+        list.push({ track: trk, stage: stg, stageIndex: sIdx });
+      });
+    });
+    return list;
+  }, [journey]);
+
+  // Chuyển sang bài tiếp theo (tự động chuyển giai đoạn 1 -> 2 -> 3 -> 4)
+  const handleNextTrack = () => {
+    if (allJourneyTracks.length === 0) return;
+    const currentIndex = allJourneyTracks.findIndex(
+      (item) => item.track.id === nowPlaying?.id || item.track.title === nowPlaying?.title
+    );
+    const nextIndex =
+      currentIndex >= 0 && currentIndex < allJourneyTracks.length - 1
+        ? currentIndex + 1
+        : 0; // Quay về đầu nếu hết hành trình
+    const nextItem = allJourneyTracks[nextIndex];
+    if (nextItem) {
+      handlePlayTrack(nextItem.track, nextItem.stage, nextItem.stageIndex);
+    }
+  };
+
+  // Quay lại bài trước đó
+  const handlePrevTrack = () => {
+    if (allJourneyTracks.length === 0) return;
+    const currentIndex = allJourneyTracks.findIndex(
+      (item) => item.track.id === nowPlaying?.id || item.track.title === nowPlaying?.title
+    );
+    const prevIndex =
+      currentIndex > 0 ? currentIndex - 1 : allJourneyTracks.length - 1;
+    const prevItem = allJourneyTracks[prevIndex];
+    if (prevItem) {
+      handlePlayTrack(prevItem.track, prevItem.stage, prevItem.stageIndex);
+    }
+  };
+
   const applyFromAI = (parsed: AIParsedResult) => {
     const next = {
       moodFrom: parsed.mood,
@@ -222,7 +264,20 @@ export default function MoodFlowMain() {
       case 'discover':
         return <DiscoverPage />;
       case 'mymusic':
-        return <MyMusicPage onPlayTrack={handlePlayTrack} />;
+        return (
+          <MyMusicPage
+            onPlayTrack={handlePlayTrack}
+            onSelectJourney={(selectedJ) => {
+              setJourney(selectedJ);
+              setPage('journey');
+              const first = selectedJ.stages?.[0]?.tracks?.[0];
+              if (first) {
+                handlePlayTrack(first, selectedJ.stages[0], 0);
+              }
+            }}
+            onGoToHome={() => setPage('home')}
+          />
+        );
       case 'community':
         return <CommunityPage />;
       case 'stats':
@@ -326,6 +381,8 @@ export default function MoodFlowMain() {
         setPlaying={handleTogglePlay}
         stageInfo={stageInfo}
         onOpenNowPlaying={() => setNowPlayingModal(true)}
+        onNext={handleNextTrack}
+        onPrev={handlePrevTrack}
       />
 
       {/* Full-Screen Now Playing Experience Modal */}
@@ -337,6 +394,8 @@ export default function MoodFlowMain() {
           currentMood={currentMood}
           stageInfo={stageInfo}
           onClose={() => setNowPlayingModal(false)}
+          onNext={handleNextTrack}
+          onPrev={handlePrevTrack}
         />
       )}
 

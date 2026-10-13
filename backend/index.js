@@ -55,11 +55,15 @@ app.use((req, res, next) => {
 // 4. QUẢN LÝ TÀI KHOẢN ĐỘC LẬP (BCRYPT + CSDL)
 // ==========================================
 
-// Kho lưu trữ dự phòng nếu bảng app_users chưa tạo trong CSDL
+// Kho lưu trữ dự phòng nếu bảng CSDL chưa tạo
 const dataDir = path.resolve(__dirname, 'data');
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 const usersFile = path.resolve(dataDir, 'users.json');
 if (!fs.existsSync(usersFile)) fs.writeFileSync(usersFile, '[]', 'utf8');
+const journeysFile = path.resolve(dataDir, 'journeys.json');
+if (!fs.existsSync(journeysFile)) fs.writeFileSync(journeysFile, '[]', 'utf8');
+const likedTracksFile = path.resolve(dataDir, 'liked_tracks.json');
+if (!fs.existsSync(likedTracksFile)) fs.writeFileSync(likedTracksFile, '[]', 'utf8');
 
 function getLocalUsers() {
   try {
@@ -72,6 +76,34 @@ function getLocalUsers() {
 function saveLocalUsers(users) {
   try {
     fs.writeFileSync(usersFile, JSON.stringify(users, null, 2), 'utf8');
+  } catch (e) {}
+}
+
+function getLocalJourneys() {
+  try {
+    return JSON.parse(fs.readFileSync(journeysFile, 'utf8'));
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveLocalJourneys(journeys) {
+  try {
+    fs.writeFileSync(journeysFile, JSON.stringify(journeys, null, 2), 'utf8');
+  } catch (e) {}
+}
+
+function getLocalLikedTracks() {
+  try {
+    return JSON.parse(fs.readFileSync(likedTracksFile, 'utf8'));
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveLocalLikedTracks(tracks) {
+  try {
+    fs.writeFileSync(likedTracksFile, JSON.stringify(tracks, null, 2), 'utf8');
   } catch (e) {}
 }
 
@@ -333,6 +365,138 @@ app.get('/api/profiles', async (req, res) => {
     }));
   }
   res.json({ success: true, count: list.length, data: list });
+});
+
+/**
+ * [POST] /api/journeys
+ * Lưu hành trình âm nhạc 4 giai đoạn vào CSDL
+ */
+app.post('/api/journeys', async (req, res) => {
+  const { title, moodFrom, moodTo, activity, duration, stages, userId } = req.body;
+
+  if (!stages || !Array.isArray(stages)) {
+    return res.status(400).json({ success: false, error: 'Dữ liệu hành trình không hợp lệ.' });
+  }
+
+  const newJourney = {
+    id: crypto.randomUUID(),
+    title: title || `${moodFrom?.label || 'Tâm trạng'} ➔ ${moodTo?.label || 'Mục tiêu'}`,
+    user_id: userId || 'guest',
+    mood_from: moodFrom?.id || 'deep_focus',
+    mood_to: moodTo?.id || 'calm_unwind',
+    activity: activity || 'deep_work',
+    duration_minutes: duration || 30,
+    total_stages: stages.length,
+    stages: stages,
+    created_at: new Date().toISOString(),
+  };
+
+  // 1. Lưu vào CSDL Supabase nếu có bảng journeys
+  if (supabase) {
+    try {
+      await supabase.from('journeys').insert({
+        id: newJourney.id,
+        title: newJourney.title,
+        duration_minutes: newJourney.duration_minutes,
+      });
+    } catch (e) {}
+  }
+
+  // 2. Lưu vào kho dữ liệu máy chủ
+  const allJourneys = getLocalJourneys();
+  allJourneys.unshift(newJourney);
+  saveLocalJourneys(allJourneys);
+
+  console.log('\n==========================================================');
+  console.log('💾 [BACKEND CSDL] ĐÃ LƯU HÀNH TRÌNH 4 GIAI ĐOẠN VÀO CSDL!');
+  console.log(`🎵 Tiêu đề:    ${newJourney.title}`);
+  console.log(`⏱️ Thời lượng: ${newJourney.duration_minutes} phút`);
+  console.log(`🎼 Cấu trúc:   4 giai đoạn khoa học (${stages.reduce((acc, s) => acc + (s.tracks?.length || 0), 0)} bài hát)`);
+  console.log('==========================================================\n');
+
+  res.json({
+    success: true,
+    message: 'Đã lưu hành trình âm nhạc thành công vào CSDL!',
+    journey: newJourney,
+  });
+});
+
+/**
+ * [GET] /api/journeys/my
+ * Lấy danh sách toàn bộ hành trình người dùng đã lưu
+ */
+app.get('/api/journeys/my', async (req, res) => {
+  const journeys = getLocalJourneys();
+  res.json({
+    success: true,
+    count: journeys.length,
+    data: journeys,
+  });
+});
+
+/**
+ * [DELETE] /api/journeys/:id
+ * Xóa một hành trình khỏi danh sách đã lưu
+ */
+app.delete('/api/journeys/:id', async (req, res) => {
+  const { id } = req.params;
+  const journeys = getLocalJourneys();
+  const filtered = journeys.filter(j => j.id !== id);
+  saveLocalJourneys(filtered);
+
+  console.log(`🗑️ [BACKEND CSDL] Đã xóa hành trình ID: ${id}`);
+  res.json({ success: true, message: 'Đã xóa hành trình thành công.' });
+});
+
+/**
+ * [POST] /api/tracks/like
+ * Thả tim / Bỏ thích bài hát
+ */
+app.post('/api/tracks/like', (req, res) => {
+  const { track } = req.body;
+  if (!track || !track.id) {
+    return res.status(400).json({ success: false, error: 'Thiếu thông tin bài hát.' });
+  }
+
+  const likedTracks = getLocalLikedTracks();
+  const existingIndex = likedTracks.findIndex(t => t.id === track.id || (t.title === track.title && t.artist === track.artist));
+
+  let isLiked = false;
+  if (existingIndex >= 0) {
+    // Đã thích -> Bỏ thích
+    likedTracks.splice(existingIndex, 1);
+    isLiked = false;
+    console.log(`🤍 [BỎ THÍCH BÀI HÁT] ${track.title} - ${track.artist}`);
+  } else {
+    // Thích bài hát
+    likedTracks.unshift({
+      ...track,
+      liked_at: new Date().toISOString(),
+    });
+    isLiked = true;
+    console.log(`❤️ [THÍCH BÀI HÁT] ${track.title} - ${track.artist} (${track.bpm ? track.bpm + ' BPM' : ''})`);
+  }
+
+  saveLocalLikedTracks(likedTracks);
+  res.json({
+    success: true,
+    liked: isLiked,
+    message: isLiked ? 'Đã thêm bài hát vào danh sách yêu thích!' : 'Đã bỏ thích bài hát.',
+    count: likedTracks.length,
+  });
+});
+
+/**
+ * [GET] /api/tracks/liked
+ * Lấy danh sách các bài hát đã thích
+ */
+app.get('/api/tracks/liked', (req, res) => {
+  const likedTracks = getLocalLikedTracks();
+  res.json({
+    success: true,
+    count: likedTracks.length,
+    data: likedTracks,
+  });
 });
 
 /**

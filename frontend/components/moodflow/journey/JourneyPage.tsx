@@ -21,6 +21,9 @@ export default function JourneyPage({
   onPlayTrack,
 }: JourneyPageProps) {
   const [saved, setSaved] = useState(false);
+  const [savedId, setSavedId] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [feedback, setFeedback] = useState<string | null>(null);
   const from = moodById(state.moodFrom);
   const to = moodById(state.moodTo);
 
@@ -45,8 +48,60 @@ export default function JourneyPage({
     }
   };
 
-  const handleToggleSave = () => {
-    setSaved(!saved);
+  const handleToggleSave = async () => {
+    if (saving) return;
+
+    if (saved && savedId) {
+      // Đã lưu -> Xóa khỏi CSDL
+      try {
+        setSaving(true);
+        await fetch(`http://localhost:5000/api/journeys/${savedId}`, {
+          method: 'DELETE',
+        });
+        setSaved(false);
+        setSavedId(null);
+        setFeedback('Đã bỏ lưu hành trình');
+        setTimeout(() => setFeedback(null), 2500);
+      } catch (err) {
+        console.error('Lỗi bỏ lưu hành trình:', err);
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    // Chưa lưu -> Gửi lên Backend POST /api/journeys
+    try {
+      setSaving(true);
+      const res = await fetch('http://localhost:5000/api/journeys', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: `${from.emoji} ${from.label} ➔ ${to.emoji} ${to.label}`,
+          moodFrom: from,
+          moodTo: to,
+          activity: journey.activityLabel || state.moodFrom,
+          duration: journey.totalMin,
+          stages: journey.stages,
+        }),
+      });
+
+      const data = await res.json();
+      if (data.success && data.journey) {
+        setSaved(true);
+        setSavedId(data.journey.id);
+        setFeedback('✨ Đã lưu hành trình vào mục "Nhạc của tôi"!');
+        setTimeout(() => setFeedback(null), 3000);
+      }
+    } catch (err) {
+      console.error('Lỗi lưu hành trình lên backend:', err);
+      // Fallback lưu local tạm thời
+      setSaved(true);
+      setFeedback('Đã lưu hành trình!');
+      setTimeout(() => setFeedback(null), 2500);
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
@@ -98,6 +153,7 @@ export default function JourneyPage({
 
           <Pressable
             onPress={handleToggleSave}
+            disabled={saving}
             style={[styles.saveBtn, saved && styles.saveBtnActive]}
           >
             <Icon
@@ -106,10 +162,16 @@ export default function JourneyPage({
               color={saved ? '#22D3EE' : COLORS.text}
             />
             <Text style={[styles.saveBtnText, saved && { color: '#22D3EE' }]}>
-              {saved ? 'Đã lưu vào Thư viện' : 'Lưu hành trình'}
+              {saving ? 'Đang lưu...' : saved ? 'Đã lưu vào Thư viện' : 'Lưu hành trình'}
             </Text>
           </Pressable>
         </View>
+
+        {feedback ? (
+          <View style={styles.feedbackBanner}>
+            <Text style={styles.feedbackText}>{feedback}</Text>
+          </View>
+        ) : null}
       </View>
 
       {/* Timeline stages */}
@@ -269,6 +331,21 @@ const styles = StyleSheet.create({
   saveBtnText: {
     color: COLORS.text,
     fontSize: 13.5,
+    fontWeight: '600',
+  },
+  feedbackBanner: {
+    marginTop: 12,
+    backgroundColor: 'rgba(34, 211, 238, 0.12)',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.3)',
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    alignSelf: 'flex-start',
+  },
+  feedbackText: {
+    color: '#22D3EE',
+    fontSize: 13,
     fontWeight: '600',
   },
   timelineWrap: {

@@ -6,10 +6,37 @@ import Icon from '@/components/moodflow/shared/Icon';
 interface MusicCardProps {
   track: Track;
   onPlay: () => void;
+  initialLiked?: boolean;
+  onToggleLike?: (track: Track, isLiked: boolean) => void;
 }
 
-export default function MusicCard({ track, onPlay }: MusicCardProps) {
-  const [liked, setLiked] = useState(false);
+export default function MusicCard({
+  track,
+  onPlay,
+  initialLiked = false,
+  onToggleLike,
+}: MusicCardProps) {
+  const [liked, setLiked] = useState(initialLiked);
+  const [loadingLike, setLoadingLike] = useState(false);
+
+  const handleToggleLike = async () => {
+    const nextState = !liked;
+    setLiked(nextState);
+    if (onToggleLike) onToggleLike(track, nextState);
+
+    try {
+      setLoadingLike(true);
+      await fetch('http://localhost:5000/api/tracks/like', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ track }),
+      });
+    } catch (err) {
+      console.error('Lỗi lưu thích bài hát:', err);
+    } finally {
+      setLoadingLike(false);
+    }
+  };
 
   return (
     <View style={styles.card}>
@@ -46,7 +73,8 @@ export default function MusicCard({ track, onPlay }: MusicCardProps) {
               <Icon name="play" size={12} color="#FFF" />
             </Pressable>
             <Pressable
-              onPress={() => setLiked(!liked)}
+              onPress={handleToggleLike}
+              disabled={loadingLike}
               style={styles.actionBtnTransparent}
             >
               <Icon
