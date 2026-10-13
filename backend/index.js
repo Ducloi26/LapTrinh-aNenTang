@@ -418,16 +418,44 @@ app.post('/api/journeys', async (req, res) => {
     created_at: new Date().toISOString(),
   };
 
-  // 1. Lưu vào CSDL Supabase nếu có bảng journeys
+  // 1. Lưu vào CSDL Supabase (bảng journeys và journey_tracks)
   if (supabase) {
     try {
       await supabase.from('journeys').insert({
         id: newJourney.id,
         user_id: effectiveUserId !== 'guest' ? effectiveUserId : null,
         title: newJourney.title,
+        mood_from: newJourney.mood_from,
+        mood_to: newJourney.mood_to,
+        activity: newJourney.activity,
         duration_minutes: newJourney.duration_minutes,
+        avg_bpm: newJourney.avg_bpm,
       });
-    } catch (e) {}
+
+      // Lưu chi tiết từng bài hát trong 4 giai đoạn vào bảng journey_tracks
+      const trackRows = [];
+      stages.forEach(stg => {
+        stg.tracks?.forEach((trk, idx) => {
+          trackRows.push({
+            journey_id: newJourney.id,
+            stage: stg.key,
+            position: idx + 1,
+            track_title: trk.title,
+            artist_name: trk.artist,
+            genre: trk.genre,
+            bpm: trk.bpm,
+            psychological_effect: trk.psychologicalEffect,
+            duration: trk.duration,
+            cover_url: trk.cover,
+          });
+        });
+      });
+      if (trackRows.length > 0) {
+        await supabase.from('journey_tracks').insert(trackRows);
+      }
+    } catch (e) {
+      console.log('ℹ️ [SUPABASE NOTICE] Chưa có bảng journeys/journey_tracks trên cloud, đã lưu dự phòng vào file JSON.');
+    }
   }
 
   // 2. Lưu vào kho dữ liệu máy chủ
