@@ -131,6 +131,14 @@ export const TRACK_POOL: Record<string, Track[]> = {
   ],
 };
 
+// Bí danh tương thích ngược để không bị lỗi undefined ở các màn hình cũ
+TRACK_POOL.focus = TRACK_POOL.acknowledge;
+TRACK_POOL.calmdown = TRACK_POOL.transition;
+TRACK_POOL.deepfocus = TRACK_POOL.elevate;
+TRACK_POOL.cooldown = TRACK_POOL.transcendence;
+TRACK_POOL.energize = TRACK_POOL.elevate;
+TRACK_POOL.romantic = TRACK_POOL.transition;
+
 export interface StageTemplate {
   key: string;
   emoji: string;

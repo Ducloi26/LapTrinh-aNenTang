@@ -102,12 +102,12 @@ export default function MoodFlowMain() {
 
   // Music Playback state
   const [nowPlaying, setNowPlaying] = useState<Track | null>(
-    () => TRACK_POOL.focus[0]
+    () => TRACK_POOL.acknowledge?.[0] || null
   );
   const [stageInfo, setStageInfo] = useState({
     index: 0,
     total: 4,
-    title: 'Focus',
+    title: 'Khởi đầu & Thấu cảm',
   });
   const [playing, setPlaying] = useState(false);
 

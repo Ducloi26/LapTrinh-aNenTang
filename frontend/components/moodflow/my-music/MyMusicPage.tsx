@@ -28,15 +28,11 @@ export default function MyMusicPage({ onPlayTrack }: MyMusicPageProps) {
   const [tab, setTab] = useState('liked');
 
   const sampleTracks: Track[] = [
-    TRACK_POOL.focus[0],
-    TRACK_POOL.calmdown[1],
-    TRACK_POOL.deepfocus[2],
-    TRACK_POOL.cooldown[0],
-  ].map((t) => ({
-    ...t,
-    mood: 'Tập trung',
-    reason: 'Nằm trong Music DNA của bạn.',
-  }));
+    TRACK_POOL.acknowledge?.[0],
+    TRACK_POOL.transition?.[0],
+    TRACK_POOL.elevate?.[0],
+    TRACK_POOL.transcendence?.[0],
+  ].filter(Boolean) as Track[];
 
   return (
     <View style={styles.container}>
