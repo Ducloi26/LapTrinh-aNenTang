@@ -20,7 +20,7 @@ export default function JourneyPage({
   state,
   onPlayTrack,
 }: JourneyPageProps) {
-  const [saved, setSaved] = useState(false);
+  const [saved, setSaved] = useState(true);
   const [savedId, setSavedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);

@@ -135,10 +135,12 @@ export default function MoodFlowMain() {
       setGenerationStep((prev) => {
         if (prev < 4) return prev + 1;
         clearInterval(interval);
-        setTimeout(() => {
+        setTimeout(async () => {
+          const from = moodById(activeState.moodFrom);
+          const to = moodById(activeState.moodTo);
           const j = generateJourney({
-            moodFrom: moodById(activeState.moodFrom),
-            moodTo: moodById(activeState.moodTo),
+            moodFrom: from,
+            moodTo: to,
             activity: activeState.activity,
             duration: activeState.duration,
           });
@@ -155,6 +157,25 @@ export default function MoodFlowMain() {
             });
             setPlaying(true);
             audioSynth.play();
+          }
+
+          // TỰ ĐỘNG LƯU VÀO CSDL BACKEND KHI TẠO HÀNH TRÌNH
+          try {
+            await fetch('http://localhost:5000/api/journeys', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                title: `${from.emoji} ${from.label} ➔ ${to.emoji} ${to.label}`,
+                moodFrom: from,
+                moodTo: to,
+                activity: j.activityLabel || activeState.activity,
+                duration: j.totalMin,
+                stages: j.stages,
+                userName: userName || 'Người nghe',
+              }),
+            });
+          } catch (err) {
+            console.error('Lỗi tự động lưu hành trình vào CSDL:', err);
           }
         }, 500);
         return prev;
