@@ -1010,6 +1010,104 @@ app.post('/api/community/posts/:id/save', (req, res) => {
   });
 });
 
+/**
+ * [PUT] /api/community/posts/:id
+ * SỬA nội dung bài viết cộng đồng
+ */
+app.put('/api/community/posts/:id', async (req, res) => {
+  const { id } = req.params;
+  const { caption, userId } = req.body;
+
+  if (!caption || !caption.trim()) {
+    return res.status(400).json({ success: false, error: 'Nội dung bài viết không được để trống.' });
+  }
+
+  const posts = getLocalCommunityPosts();
+  const post = posts.find(p => p.id === id);
+
+  if (!post) {
+    return res.status(404).json({ success: false, error: 'Không tìm thấy bài viết.' });
+  }
+
+  // Cập nhật caption và thời điểm sửa
+  post.caption = caption.trim();
+  post.updated_at = new Date().toISOString();
+
+  // Cập nhật Supabase nếu có
+  if (supabase) {
+    try {
+      await supabase.from('community_posts').update({ caption: post.caption }).eq('id', id);
+    } catch (e) {}
+  }
+
+  saveLocalCommunityPosts(posts);
+
+  console.log(`✏️ [CỘNG ĐỒNG] ĐÃ CHỈNH SỬA BÀI VIẾT ID: ${id}`);
+  res.json({
+    success: true,
+    message: 'Đã cập nhật bài viết thành công!',
+    post,
+  });
+});
+
+/**
+ * [DELETE] /api/community/posts/:id
+ * XÓA bài viết khỏi Bảng tin cộng đồng
+ */
+app.delete('/api/community/posts/:id', async (req, res) => {
+  const { id } = req.params;
+
+  let posts = getLocalCommunityPosts();
+  const exists = posts.some(p => p.id === id);
+
+  if (!exists) {
+    return res.status(404).json({ success: false, error: 'Không tìm thấy bài viết để xóa.' });
+  }
+
+  posts = posts.filter(p => p.id !== id);
+
+  if (supabase) {
+    try {
+      await supabase.from('community_posts').delete().eq('id', id);
+    } catch (e) {}
+  }
+
+  saveLocalCommunityPosts(posts);
+
+  console.log(`🗑️ [CỘNG ĐỒNG] ĐÃ XÓA BÀI VIẾT ID: ${id}`);
+  res.json({
+    success: true,
+    message: 'Đã xóa bài viết khỏi bảng tin cộng đồng thành công!',
+  });
+});
+
+/**
+ * [DELETE] /api/community/posts/:id/comments/:commentId
+ * XÓA bình luận khỏi bài viết
+ */
+app.delete('/api/community/posts/:id/comments/:commentId', (req, res) => {
+  const { id, commentId } = req.params;
+
+  const posts = getLocalCommunityPosts();
+  const post = posts.find(p => p.id === id);
+
+  if (!post || !Array.isArray(post.comments)) {
+    return res.status(404).json({ success: false, error: 'Không tìm thấy bài viết.' });
+  }
+
+  post.comments = post.comments.filter(c => c.id !== commentId);
+  post.comment_count = post.comments.length;
+
+  saveLocalCommunityPosts(posts);
+
+  console.log(`🗑️ [CỘNG ĐỒNG] Đã xóa bình luận ID ${commentId} trong bài viết ${id}`);
+  res.json({
+    success: true,
+    message: 'Đã xóa bình luận thành công.',
+    comment_count: post.comment_count,
+  });
+});
+
 // 6. Khởi động Server
 app.listen(PORT, () => {
   console.log('\n==========================================================');

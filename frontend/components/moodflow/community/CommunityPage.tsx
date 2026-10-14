@@ -14,6 +14,7 @@ import { COLORS, MOODS, moodById } from '@/constants/moodflow';
 import SectionTitle from '@/components/moodflow/shared/SectionTitle';
 import Icon from '@/components/moodflow/shared/Icon';
 import ShareJourneyModal from '@/components/moodflow/community/ShareJourneyModal';
+import EditPostModal from '@/components/moodflow/community/EditPostModal';
 
 interface CommunityComment {
   id: string;
@@ -52,6 +53,8 @@ export default function CommunityPage({
   const [posts, setPosts] = useState<CommunityPost[]>([]);
   const [loading, setLoading] = useState(false);
   const [shareModalOpen, setShareModalOpen] = useState(false);
+  const [editingPost, setEditingPost] = useState<CommunityPost | null>(null);
+  const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
 
   // Trạng thái bình luận & lưu bài
   const [openCommentPostId, setOpenCommentPostId] = useState<string | null>(null);
@@ -79,6 +82,60 @@ export default function CommunityPage({
   useEffect(() => {
     fetchPosts();
   }, [tab, selectedMood]);
+
+  // Xóa bài viết
+  const handleDeletePost = async (postId: string) => {
+    try {
+      setDeletingPostId(postId);
+      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_token') : null;
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`http://localhost:5000/api/community/posts/${postId}`, {
+        method: 'DELETE',
+        headers,
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPosts((prev) => prev.filter((p) => p.id !== postId));
+      }
+    } catch (err) {
+      console.error('Lỗi xóa bài viết:', err);
+    } finally {
+      setDeletingPostId(null);
+    }
+  };
+
+  // Xóa bình luận
+  const handleDeleteComment = async (postId: string, commentId: string) => {
+    try {
+      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_token') : null;
+      const headers: Record<string, string> = {};
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
+      const res = await fetch(`http://localhost:5000/api/community/posts/${postId}/comments/${commentId}`, {
+        method: 'DELETE',
+        headers,
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPosts((prev) =>
+          prev.map((p) => {
+            if (p.id === postId) {
+              return {
+                ...p,
+                comment_count: Math.max(0, p.comment_count - 1),
+                comments: p.comments?.filter((c) => c.id !== commentId) || [],
+              };
+            }
+            return p;
+          })
+        );
+      }
+    } catch (err) {
+      console.error('Lỗi xóa bình luận:', err);
+    }
+  };
 
   // 2. Thả tim / Bỏ tim bài viết
   const handleToggleLike = async (postId: string) => {
@@ -368,6 +425,34 @@ export default function CommunityPage({
                     <Text style={styles.authorName}>{post.author_name}</Text>
                     <Text style={styles.postTime}>{formatTimeAgo(post.created_at)}</Text>
                   </View>
+
+                  {/* Nút Thao tác Bài viết: Sửa & Xóa */}
+                  <View style={styles.postActionsWrap}>
+                    <Pressable
+                      style={styles.postEditBtn}
+                      onPress={() => setEditingPost(post)}
+                      accessibilityLabel="Sửa bài viết"
+                    >
+                      <Icon name="edit" size={13} color="#22D3EE" />
+                      <Text style={styles.postEditText}>Sửa</Text>
+                    </Pressable>
+
+                    <Pressable
+                      style={styles.postDeleteBtn}
+                      onPress={() => handleDeletePost(post.id)}
+                      disabled={deletingPostId === post.id}
+                      accessibilityLabel="Xóa bài viết"
+                    >
+                      {deletingPostId === post.id ? (
+                        <ActivityIndicator size="small" color="#F43F5E" />
+                      ) : (
+                        <>
+                          <Icon name="trash" size={13} color="#F43F5E" />
+                          <Text style={styles.postDeleteText}>Xóa</Text>
+                        </>
+                      )}
+                    </Pressable>
+                  </View>
                 </View>
 
                 {/* Caption / Story */}
@@ -496,7 +581,16 @@ export default function CommunityPage({
                           <View key={c.id} style={styles.commentItem}>
                             <View style={styles.commentAuthorRow}>
                               <Text style={styles.commentAuthor}>{c.author_name}</Text>
-                              <Text style={styles.commentTime}>{formatTimeAgo(c.created_at)}</Text>
+                              <View style={styles.commentRightMeta}>
+                                <Text style={styles.commentTime}>{formatTimeAgo(c.created_at)}</Text>
+                                <Pressable
+                                  style={styles.commentDeleteBtn}
+                                  onPress={() => handleDeleteComment(post.id, c.id)}
+                                  accessibilityLabel="Xóa bình luận"
+                                >
+                                  <Icon name="trash" size={11} color={COLORS.faint} />
+                                </Pressable>
+                              </View>
                             </View>
                             <Text style={styles.commentContent}>{c.content}</Text>
                           </View>
@@ -537,7 +631,7 @@ export default function CommunityPage({
         </View>
       )}
 
-      {/* Share Journey Modal */}
+      {/* Share Journey Modal (THÊM BÀI VIẾT) */}
       <ShareJourneyModal
         visible={shareModalOpen}
         onClose={() => setShareModalOpen(false)}
@@ -546,6 +640,16 @@ export default function CommunityPage({
         }}
         userId={userId}
         userName={userName}
+      />
+
+      {/* Edit Post Modal (SỬA BÀI VIẾT) */}
+      <EditPostModal
+        visible={!!editingPost}
+        post={editingPost}
+        onClose={() => setEditingPost(null)}
+        onUpdateSuccess={() => {
+          fetchPosts();
+        }}
       />
     </View>
   );
@@ -955,5 +1059,52 @@ const styles = StyleSheet.create({
     color: '#22D3EE',
     fontSize: 12.5,
     fontWeight: '700',
+  },
+  postActionsWrap: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  postEditBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: 'rgba(34, 211, 238, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.25)',
+  },
+  postEditText: {
+    color: '#22D3EE',
+    fontSize: 11.5,
+    fontWeight: '600',
+  },
+  postDeleteBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+    borderRadius: 6,
+    backgroundColor: 'rgba(244, 63, 94, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(244, 63, 94, 0.25)',
+  },
+  postDeleteText: {
+    color: '#F43F5E',
+    fontSize: 11.5,
+    fontWeight: '600',
+  },
+  commentRightMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  commentDeleteBtn: {
+    padding: 3,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255, 255, 255, 0.05)',
   },
 });
