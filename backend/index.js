@@ -64,6 +64,8 @@ const journeysFile = path.resolve(dataDir, 'journeys.json');
 if (!fs.existsSync(journeysFile)) fs.writeFileSync(journeysFile, '[]', 'utf8');
 const likedTracksFile = path.resolve(dataDir, 'liked_tracks.json');
 if (!fs.existsSync(likedTracksFile)) fs.writeFileSync(likedTracksFile, '[]', 'utf8');
+const communityFile = path.resolve(dataDir, 'community_posts.json');
+if (!fs.existsSync(communityFile)) fs.writeFileSync(communityFile, '[]', 'utf8');
 
 function getLocalUsers() {
   try {
@@ -104,6 +106,20 @@ function getLocalLikedTracks() {
 function saveLocalLikedTracks(tracks) {
   try {
     fs.writeFileSync(likedTracksFile, JSON.stringify(tracks, null, 2), 'utf8');
+  } catch (e) {}
+}
+
+function getLocalCommunityPosts() {
+  try {
+    return JSON.parse(fs.readFileSync(communityFile, 'utf8'));
+  } catch (e) {
+    return [];
+  }
+}
+
+function saveLocalCommunityPosts(posts) {
+  try {
+    fs.writeFileSync(communityFile, JSON.stringify(posts, null, 2), 'utf8');
   } catch (e) {}
 }
 
@@ -739,6 +755,259 @@ app.get('/api/tracks', async (req, res) => {
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
+});
+
+// ==========================================
+// 5. CỘNG ĐỒNG MOODFLOW (COMMUNITY API)
+// ==========================================
+
+/**
+ * [GET] /api/community/posts
+ * Lấy danh sách bài viết cộng đồng (hỗ trợ lọc Thịnh hành, Mới nhất, và Theo tâm trạng)
+ */
+app.get('/api/community/posts', (req, res) => {
+  const { tab, mood } = req.query;
+  let posts = getLocalCommunityPosts();
+
+  // 1. Lọc theo tâm trạng (nếu có)
+  if (mood && mood !== 'all') {
+    posts = posts.filter(p => 
+      p.journey?.mood_from === mood || 
+      p.journey?.mood_to === mood
+    );
+  }
+
+  // 2. Sắp xếp theo tab
+  if (tab === 'trending') {
+    // Công thức tính điểm thịnh hành
+    posts.sort((a, b) => {
+      const scoreA = (a.like_count || 0) * 2 + (a.comment_count || 0) * 3;
+      const scoreB = (b.like_count || 0) * 2 + (b.comment_count || 0) * 3;
+      return scoreB - scoreA;
+    });
+  } else {
+    // Mặc định: Mới nhất trước
+    posts.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+  }
+
+  res.json({
+    success: true,
+    count: posts.length,
+    data: posts,
+  });
+});
+
+/**
+ * [POST] /api/community/posts
+ * Đăng bài chia sẻ Hành trình lên Bảng tin cộng đồng
+ */
+app.post('/api/community/posts', async (req, res) => {
+  const { caption, journey, authorName, userId } = req.body;
+
+  if (!caption || !journey) {
+    return res.status(400).json({ success: false, error: 'Vui lòng cung cấp nội dung chia sẻ và chọn hành trình!' });
+  }
+
+  let effectiveUserId = userId || 'guest';
+  let effectiveAuthor = authorName || 'Thành viên MoodFlow';
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+      if (decoded?.id) effectiveUserId = decoded.id;
+      if (decoded?.name) effectiveAuthor = decoded.name;
+    } catch (e) {}
+  }
+
+  const newPost = {
+    id: crypto.randomUUID(),
+    user_id: effectiveUserId,
+    author_name: effectiveAuthor,
+    author_avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=150&auto=format&fit=crop&q=80',
+    caption: caption.trim(),
+    like_count: 0,
+    liked_by: [],
+    comment_count: 0,
+    comments: [],
+    journey: journey,
+    created_at: new Date().toISOString(),
+  };
+
+  // 1. Lưu vào CSDL Supabase nếu có
+  if (supabase) {
+    try {
+      await supabase.from('community_posts').insert({
+        id: newPost.id,
+        user_id: effectiveUserId !== 'guest' ? effectiveUserId : null,
+        author_name: effectiveAuthor,
+        caption: newPost.caption,
+        journey_data: newPost.journey,
+        like_count: 0,
+        comment_count: 0,
+      });
+    } catch (e) {}
+  }
+
+  // 2. Lưu vào kho dữ liệu JSON
+  const allPosts = getLocalCommunityPosts();
+  allPosts.unshift(newPost);
+  saveLocalCommunityPosts(allPosts);
+
+  console.log('\n==========================================================');
+  console.log('📢 [CỘNG ĐỒNG] BÀI VIẾT MỚI VỪA ĐƯỢC CHIA SẺ!');
+  console.log(`👤 Tác giả:   ${effectiveAuthor}`);
+  console.log(`💬 Lời nhắn:  "${newPost.caption}"`);
+  console.log(`🎵 Hành trình: ${newPost.journey.title}`);
+  console.log('==========================================================\n');
+
+  res.json({
+    success: true,
+    message: 'Đã đăng bài chia sẻ hành trình thành công lên cộng đồng!',
+    post: newPost,
+  });
+});
+
+/**
+ * [POST] /api/community/posts/:id/like
+ * Thả tim / Bỏ tim bài viết cộng đồng
+ */
+app.post('/api/community/posts/:id/like', (req, res) => {
+  const { id } = req.params;
+  const { userId } = req.body;
+
+  let effectiveUserId = userId || 'guest';
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+      if (decoded?.id) effectiveUserId = decoded.id;
+    } catch (e) {}
+  }
+
+  const posts = getLocalCommunityPosts();
+  const post = posts.find(p => p.id === id);
+
+  if (!post) {
+    return res.status(404).json({ success: false, error: 'Không tìm thấy bài viết.' });
+  }
+
+  if (!Array.isArray(post.liked_by)) post.liked_by = [];
+
+  const likedIndex = post.liked_by.indexOf(effectiveUserId);
+  let isLiked = false;
+
+  if (likedIndex >= 0) {
+    // Đã thích -> Bỏ thích
+    post.liked_by.splice(likedIndex, 1);
+    post.like_count = Math.max(0, (post.like_count || 1) - 1);
+    isLiked = false;
+  } else {
+    // Thích bài viết
+    post.liked_by.push(effectiveUserId);
+    post.like_count = (post.like_count || 0) + 1;
+    isLiked = true;
+  }
+
+  saveLocalCommunityPosts(posts);
+
+  res.json({
+    success: true,
+    liked: isLiked,
+    like_count: post.like_count,
+  });
+});
+
+/**
+ * [POST] /api/community/posts/:id/comments
+ * Gửi bình luận vào bài viết cộng đồng
+ */
+app.post('/api/community/posts/:id/comments', (req, res) => {
+  const { id } = req.params;
+  const { content, authorName, userId } = req.body;
+
+  if (!content || !content.trim()) {
+    return res.status(400).json({ success: false, error: 'Nội dung bình luận không được để trống.' });
+  }
+
+  let effectiveAuthor = authorName || 'Người nghe';
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+      if (decoded?.name) effectiveAuthor = decoded.name;
+    } catch (e) {}
+  }
+
+  const posts = getLocalCommunityPosts();
+  const post = posts.find(p => p.id === id);
+
+  if (!post) {
+    return res.status(404).json({ success: false, error: 'Không tìm thấy bài viết.' });
+  }
+
+  if (!Array.isArray(post.comments)) post.comments = [];
+
+  const newComment = {
+    id: crypto.randomUUID(),
+    author_name: effectiveAuthor,
+    content: content.trim(),
+    created_at: new Date().toISOString(),
+  };
+
+  post.comments.push(newComment);
+  post.comment_count = post.comments.length;
+
+  saveLocalCommunityPosts(posts);
+
+  res.json({
+    success: true,
+    message: 'Đã gửi bình luận thành công!',
+    comment: newComment,
+    comment_count: post.comment_count,
+  });
+});
+
+/**
+ * [POST] /api/community/posts/:id/save
+ * Lưu hành trình từ bài viết cộng đồng vào Thư viện của tôi
+ */
+app.post('/api/community/posts/:id/save', (req, res) => {
+  const { id } = req.params;
+  const { userId } = req.body;
+
+  const posts = getLocalCommunityPosts();
+  const post = posts.find(p => p.id === id);
+
+  if (!post || !post.journey) {
+    return res.status(404).json({ success: false, error: 'Hành trình không tồn tại.' });
+  }
+
+  let effectiveUserId = userId || 'guest';
+  const authHeader = req.headers.authorization;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+      if (decoded?.id) effectiveUserId = decoded.id;
+    } catch (e) {}
+  }
+
+  const savedJourney = {
+    ...post.journey,
+    id: crypto.randomUUID(),
+    user_id: effectiveUserId,
+    title: `[Cộng đồng] ${post.journey.title}`,
+    created_at: new Date().toISOString(),
+  };
+
+  const journeys = getLocalJourneys();
+  journeys.unshift(savedJourney);
+  saveLocalJourneys(journeys);
+
+  res.json({
+    success: true,
+    message: 'Đã lưu hành trình từ cộng đồng vào Thư viện của bạn!',
+    journey: savedJourney,
+  });
 });
 
 // 6. Khởi động Server

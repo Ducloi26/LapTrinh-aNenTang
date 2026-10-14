@@ -47,6 +47,7 @@ import { getCurrentUserProfile } from '@/services/mood-service';
 export default function MoodFlowMain() {
   const [authed, setAuthed] = useState(true);
   const [userName, setUserName] = useState('Người nghe');
+  const [userId, setUserId] = useState<string>('guest');
 
   // Kiểm tra session từ Backend JWT hoặc Supabase Cloud
   React.useEffect(() => {
@@ -57,6 +58,7 @@ export default function MoodFlowMain() {
         try {
           const u = JSON.parse(savedUser);
           if (u?.displayName) setUserName(u.displayName);
+          if (u?.id) setUserId(u.id);
           setAuthed(true);
         } catch (e) {}
       }
@@ -65,6 +67,7 @@ export default function MoodFlowMain() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setAuthed(true);
+        if (session.user.id) setUserId(session.user.id);
         getCurrentUserProfile().then((prof) => {
           if (prof?.displayName) setUserName(prof.displayName);
         });
@@ -74,6 +77,7 @@ export default function MoodFlowMain() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         setAuthed(true);
+        if (session.user.id) setUserId(session.user.id);
         getCurrentUserProfile().then((prof) => {
           if (prof?.displayName) setUserName(prof.displayName);
         });
@@ -314,7 +318,20 @@ export default function MoodFlowMain() {
           />
         );
       case 'community':
-        return <CommunityPage />;
+        return (
+          <CommunityPage
+            onSelectJourney={(selectedJ) => {
+              setJourney(selectedJ);
+              setPage('journey');
+              const first = selectedJ.stages?.[0]?.tracks?.[0];
+              if (first) {
+                handlePlayTrack(first, selectedJ.stages[0], 0);
+              }
+            }}
+            userId={userId}
+            userName={userName}
+          />
+        );
       case 'stats':
         return <StatisticsPage />;
       case 'settings':
