@@ -130,6 +130,21 @@ export default function MoodFlowMain() {
   });
   const [playing, setPlaying] = useState(false);
 
+  // Cảnh báo người dùng trước khi đóng tab/tắt app khi đang nghe
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const handleBeforeUnload = (e: any) => {
+        if (playing) {
+          e.preventDefault();
+          e.returnValue = 'Bạn có muốn đánh giá phiên trị liệu âm nhạc trước khi rời đi?';
+          return e.returnValue;
+        }
+      };
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }
+  }, [playing]);
+
   const currentMood = moodById(state.moodFrom);
 
   // Trigger Journey Generation with 5-step animation
@@ -245,10 +260,20 @@ export default function MoodFlowMain() {
     const currentIndex = allJourneyTracks.findIndex(
       (item) => item.track.id === nowPlaying?.id || item.track.title === nowPlaying?.title
     );
+
+    // KHI NGƯỜI DÙNG NGHE XONG BÀI CUỐI CÙNG CỦA HÀNH TRÌNH 4 GIAI ĐOẠN:
+    const isLastTrack = currentIndex === allJourneyTracks.length - 1;
+    if (isLastTrack) {
+      audioSynth.pause();
+      setPlaying(false);
+      setFeedbackModalOpen(true); // TỰ ĐỘNG HIỆN POP-UP ĐÁNH GIÁ CẢM XÚC!
+      return;
+    }
+
     const nextIndex =
       currentIndex >= 0 && currentIndex < allJourneyTracks.length - 1
         ? currentIndex + 1
-        : 0; // Quay về đầu nếu hết hành trình
+        : 0;
     const nextItem = allJourneyTracks[nextIndex];
     if (nextItem) {
       handlePlayTrack(nextItem.track, nextItem.stage, nextItem.stageIndex);
@@ -455,6 +480,7 @@ export default function MoodFlowMain() {
         onOpenNowPlaying={() => setNowPlayingModal(true)}
         onNext={handleNextTrack}
         onPrev={handlePrevTrack}
+        onFinishJourney={() => setFeedbackModalOpen(true)}
       />
 
       {/* Full-Screen Now Playing Experience Modal */}

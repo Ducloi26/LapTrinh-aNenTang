@@ -21,6 +21,7 @@ interface BottomPlayerProps {
   onOpenNowPlaying: () => void;
   onNext?: () => void;
   onPrev?: () => void;
+  onFinishJourney?: () => void;
 }
 
 export default function BottomPlayer({
@@ -31,6 +32,7 @@ export default function BottomPlayer({
   onOpenNowPlaying,
   onNext,
   onPrev,
+  onFinishJourney,
 }: BottomPlayerProps) {
   const spinValue = useRef(new Animated.Value(0)).current;
 
@@ -119,6 +121,11 @@ export default function BottomPlayer({
 
       {/* Right Controls */}
       <View style={styles.rightSection}>
+        {onFinishJourney && (
+          <Pressable onPress={onFinishJourney} style={styles.finishBtn}>
+            <Text style={styles.finishBtnText}>🏁 Đánh giá</Text>
+          </Pressable>
+        )}
         {stageInfo && (
           <Text style={styles.stageText}>
             Giai đoạn {stageInfo.index + 1}/{stageInfo.total} — {stageInfo.title}
@@ -136,6 +143,20 @@ export default function BottomPlayer({
 }
 
 const styles = StyleSheet.create({
+  finishBtn: {
+    backgroundColor: 'rgba(34, 211, 238, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.4)',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    marginRight: 6,
+  },
+  finishBtnText: {
+    color: '#22D3EE',
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
   footer: {
     position: 'absolute',
     left: 0,
