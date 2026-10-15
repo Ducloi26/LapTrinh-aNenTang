@@ -99,6 +99,7 @@ erDiagram
 | `email` | `VARCHAR(255)` | `UNIQUE`, `NOT NULL` | Địa chỉ email đăng nhập (chuẩn hóa chữ thường) |
 | `password_hash` | `TEXT` | `NOT NULL` | Mật khẩu đã băm một chiều an toàn bằng Bcrypt |
 | `display_name` | `VARCHAR(100)` | `NOT NULL`, Default: `'Người nghe'` | Tên hiển thị của người dùng trên giao diện |
+| `role` | `VARCHAR(20)` | `NOT NULL`, Default: `'user'`, Check: `'user', 'admin'` | Phân quyền tài khoản: `'user'` (Người nghe thông thường) hoặc `'admin'` (Quản trị viên hệ thống) |
 | `created_at` | `TIMESTAMPTZ` | Default: `now()` | Thời điểm tạo tài khoản |
 | `updated_at` | `TIMESTAMPTZ` | Default: `now()` | Thời điểm cập nhật gần nhất |
 

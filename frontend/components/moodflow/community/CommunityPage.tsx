@@ -41,12 +41,14 @@ interface CommunityPageProps {
   onSelectJourney?: (journey: any) => void;
   userId?: string;
   userName?: string;
+  userRole?: 'user' | 'admin';
 }
 
 export default function CommunityPage({
   onSelectJourney,
   userId = 'guest',
   userName = 'Người nghe',
+  userRole = 'user',
 }: CommunityPageProps) {
   const [tab, setTab] = useState<'trending' | 'latest'>('trending');
   const [selectedMood, setSelectedMood] = useState<string>('all');
@@ -426,33 +428,50 @@ export default function CommunityPage({
                     <Text style={styles.postTime}>{formatTimeAgo(post.created_at)}</Text>
                   </View>
 
-                  {/* Nút Thao tác Bài viết: Sửa & Xóa */}
-                  <View style={styles.postActionsWrap}>
-                    <Pressable
-                      style={styles.postEditBtn}
-                      onPress={() => setEditingPost(post)}
-                      accessibilityLabel="Sửa bài viết"
-                    >
-                      <Icon name="edit" size={13} color="#22D3EE" />
-                      <Text style={styles.postEditText}>Sửa</Text>
-                    </Pressable>
+                  {/* Nút Thao tác Bài viết: Phân quyền Tác giả & Quản trị viên */}
+                  {(() => {
+                    const isAuthor = post.user_id === userId;
+                    const isAdmin = userRole === 'admin';
+                    const canEdit = isAuthor;
+                    const canDelete = isAuthor || isAdmin;
 
-                    <Pressable
-                      style={styles.postDeleteBtn}
-                      onPress={() => handleDeletePost(post.id)}
-                      disabled={deletingPostId === post.id}
-                      accessibilityLabel="Xóa bài viết"
-                    >
-                      {deletingPostId === post.id ? (
-                        <ActivityIndicator size="small" color="#F43F5E" />
-                      ) : (
-                        <>
-                          <Icon name="trash" size={13} color="#F43F5E" />
-                          <Text style={styles.postDeleteText}>Xóa</Text>
-                        </>
-                      )}
-                    </Pressable>
-                  </View>
+                    if (!canEdit && !canDelete) return null;
+
+                    return (
+                      <View style={styles.postActionsWrap}>
+                        {canEdit && (
+                          <Pressable
+                            style={styles.postEditBtn}
+                            onPress={() => setEditingPost(post)}
+                            accessibilityLabel="Sửa bài viết"
+                          >
+                            <Icon name="edit" size={13} color="#22D3EE" />
+                            <Text style={styles.postEditText}>Sửa</Text>
+                          </Pressable>
+                        )}
+
+                        {canDelete && (
+                          <Pressable
+                            style={styles.postDeleteBtn}
+                            onPress={() => handleDeletePost(post.id)}
+                            disabled={deletingPostId === post.id}
+                            accessibilityLabel={isAdmin && !isAuthor ? 'Gỡ bài viết (Admin)' : 'Xóa bài viết'}
+                          >
+                            {deletingPostId === post.id ? (
+                              <ActivityIndicator size="small" color="#F43F5E" />
+                            ) : (
+                              <>
+                                <Icon name="trash" size={13} color="#F43F5E" />
+                                <Text style={styles.postDeleteText}>
+                                  {isAdmin && !isAuthor ? 'Gỡ bài (Admin)' : 'Xóa'}
+                                </Text>
+                              </>
+                            )}
+                          </Pressable>
+                        )}
+                      </View>
+                    );
+                  })()}
                 </View>
 
                 {/* Caption / Story */}

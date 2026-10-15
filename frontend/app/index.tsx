@@ -48,6 +48,7 @@ export default function MoodFlowMain() {
   const [authed, setAuthed] = useState(true);
   const [userName, setUserName] = useState('Người nghe');
   const [userId, setUserId] = useState<string>('guest');
+  const [userRole, setUserRole] = useState<'user' | 'admin'>('user');
 
   // Kiểm tra session từ Backend JWT hoặc Supabase Cloud
   React.useEffect(() => {
@@ -59,6 +60,7 @@ export default function MoodFlowMain() {
           const u = JSON.parse(savedUser);
           if (u?.displayName) setUserName(u.displayName);
           if (u?.id) setUserId(u.id);
+          if (u?.role) setUserRole(u.role);
           setAuthed(true);
         } catch (e) {}
       }
@@ -330,6 +332,7 @@ export default function MoodFlowMain() {
             }}
             userId={userId}
             userName={userName}
+            userRole={userRole}
           />
         );
       case 'stats':

@@ -139,13 +139,14 @@ async function findUserByEmail(email) {
   return locals.find(u => u.email.toLowerCase() === normEmail) || null;
 }
 
-async function createUser({ email, passwordHash, displayName }) {
+async function createUser({ email, passwordHash, displayName, role = 'user' }) {
   const normEmail = email.toLowerCase().trim();
   const newUser = {
     id: crypto.randomUUID(),
     email: normEmail,
     password_hash: passwordHash,
     display_name: displayName || 'Người nghe',
+    role: role === 'admin' ? 'admin' : 'user',
     created_at: new Date().toISOString(),
   };
 
@@ -158,6 +159,7 @@ async function createUser({ email, passwordHash, displayName }) {
           email: newUser.email,
           password_hash: newUser.password_hash,
           display_name: newUser.display_name,
+          role: newUser.role,
         })
         .select()
         .single();
@@ -170,6 +172,43 @@ async function createUser({ email, passwordHash, displayName }) {
   locals.push(newUser);
   saveLocalUsers(locals);
   return newUser;
+}
+
+/**
+ * Tự động khởi tạo tài khoản Quản trị viên (Admin) và Người dùng (User) mẫu
+ */
+async function initDefaultAccounts() {
+  try {
+    const adminEmail = 'admin@moodflow.com';
+    const existingAdmin = await findUserByEmail(adminEmail);
+    if (!existingAdmin) {
+      const salt = await bcrypt.genSalt(10);
+      const hash = await bcrypt.hash('Admin@123456', salt);
+      await createUser({
+        email: adminEmail,
+        passwordHash: hash,
+        displayName: 'Quản trị viên MoodFlow',
+        role: 'admin',
+      });
+      console.log('👑 [SEED] Đã khởi tạo tài khoản Quản trị viên: admin@moodflow.com / Admin@123456');
+    }
+
+    const demoUserEmail = 'ducloi@moodflow.com';
+    const existingUser = await findUserByEmail(demoUserEmail);
+    if (!existingUser) {
+      const salt = await bcrypt.genSalt(10);
+      const hash = await bcrypt.hash('User@123456', salt);
+      await createUser({
+        email: demoUserEmail,
+        passwordHash: hash,
+        displayName: 'Đức Lợi',
+        role: 'user',
+      });
+      console.log('👤 [SEED] Đã khởi tạo tài khoản Người dùng mẫu: ducloi@moodflow.com / User@123456');
+    }
+  } catch (err) {
+    console.error('Lỗi khởi tạo tài khoản mặc định:', err.message);
+  }
 }
 
 // ==========================================
@@ -240,15 +279,17 @@ app.post('/api/auth/register', async (req, res) => {
     const passwordHash = await bcrypt.hash(password, salt);
 
     // 3. Lưu tài khoản vào CSDL (bảng app_users)
+    // QUAN TRỌNG: Người ngoài đăng ký tài khoản tự do LUÔN LUÔN CHỈ LÀ USER THƯỜNG ('user')
     const user = await createUser({
       email,
       passwordHash,
-      displayName: name || 'Người nghe'
+      displayName: name || 'Người nghe',
+      role: 'user', // Cố định role 'user' để đảm bảo an toàn tuyệt đối
     });
 
-    // 4. Backend tự tạo mã JWT Token (hạn dùng 7 ngày)
+    // 4. Backend tự tạo mã JWT Token (hạn dùng 7 ngày) kèm vai trò role
     const token = jwt.sign(
-      { id: user.id, email: user.email, name: user.display_name },
+      { id: user.id, email: user.email, name: user.display_name, role: user.role || 'user' },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
@@ -257,6 +298,7 @@ app.post('/api/auth/register', async (req, res) => {
     console.log('👤 [BACKEND AUTH] ĐĂNG KÝ TÀI KHOẢN MỚI THÀNH CÔNG!');
     console.log(`📧 Email:        ${user.email}`);
     console.log(`🏷️ Tên:          ${user.display_name}`);
+    console.log(`🎭 Vai trò:      ${user.role || 'user'}`);
     console.log(`🔒 Mật khẩu băm: ${passwordHash.substring(0, 22)}... (Bcrypt)`);
     console.log(`🎟️ JWT Token:    ${token.substring(0, 25)}... (7 ngày)`);
     console.log('==========================================================\n');
@@ -269,6 +311,7 @@ app.post('/api/auth/register', async (req, res) => {
         id: user.id,
         email: user.email,
         displayName: user.display_name,
+        role: user.role || 'user',
       }
     });
   } catch (err) {
@@ -310,14 +353,15 @@ app.post('/api/auth/login', async (req, res) => {
       });
     }
 
-    // 3. Backend tự cấp JWT Token
+    // 3. Backend tự cấp JWT Token kèm quyền role
+    const userRole = user.role || 'user';
     const token = jwt.sign(
-      { id: user.id, email: user.email, name: user.display_name },
+      { id: user.id, email: user.email, name: user.display_name, role: userRole },
       JWT_SECRET,
       { expiresIn: '7d' }
     );
 
-    console.log(`\n🔑 [BACKEND AUTH] ĐĂNG NHẬP THÀNH CÔNG: ${user.email} (Tên: ${user.display_name})\n`);
+    console.log(`\n🔑 [BACKEND AUTH] ĐĂNG NHẬP THÀNH CÔNG: ${user.email} (Role: ${userRole})\n`);
 
     res.json({
       success: true,
@@ -327,6 +371,7 @@ app.post('/api/auth/login', async (req, res) => {
         id: user.id,
         email: user.email,
         displayName: user.display_name,
+        role: userRole,
       }
     });
   } catch (err) {
@@ -353,6 +398,7 @@ app.get('/api/auth/me', (req, res) => {
         id: decoded.id,
         email: decoded.email,
         displayName: decoded.name,
+        role: decoded.role || 'user',
       }
     });
   } catch (err) {
@@ -1109,7 +1155,7 @@ app.delete('/api/community/posts/:id/comments/:commentId', (req, res) => {
 });
 
 // 6. Khởi động Server
-app.listen(PORT, () => {
+app.listen(PORT, async () => {
   console.log('\n==========================================================');
   console.log('🚀 MÁY CHỦ BACKEND MOODFLOW ĐÃ KHỞI CHẠY THÀNH CÔNG!');
   console.log('==========================================================');
@@ -1121,5 +1167,9 @@ app.listen(PORT, () => {
   console.log(`🎵 Danh sách bài hát:   http://localhost:${PORT}/api/tracks`);
   console.log(`👥 Danh sách tài khoản: http://localhost:${PORT}/api/profiles`);
   console.log('==========================================================');
+
+  // Khởi tạo các tài khoản mẫu nếu chưa có
+  await initDefaultAccounts();
+
   console.log('💡 Nhấn phím Ctrl + C để dừng máy chủ bất cứ lúc nào.\n');
 });
