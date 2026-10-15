@@ -38,6 +38,7 @@ import BottomPlayer from '@/components/moodflow/player/BottomPlayer';
 import NowPlayingModal from '@/components/moodflow/player/NowPlayingModal';
 import AIAssistantModal from '@/components/moodflow/ai-assistant/AIAssistantModal';
 import GeneratingModal from '@/components/moodflow/ai-assistant/GeneratingModal';
+import SessionFeedbackModal from '@/components/moodflow/statistics/SessionFeedbackModal';
 
 // Auth Screen
 import AuthScreen from '@/app/auth';
@@ -336,7 +337,13 @@ export default function MoodFlowMain() {
           />
         );
       case 'stats':
-        return <StatisticsPage />;
+        return (
+          <StatisticsPage
+            userId={userId}
+            userName={userName}
+            currentJourney={journey}
+          />
+        );
       case 'settings':
         return (
           <SettingsPage
@@ -352,7 +359,10 @@ export default function MoodFlowMain() {
     }
   }, [page, state, journey, userName, playing]);
 
-  const handleLogout = async () => {
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+  const [logoutPending, setLogoutPending] = useState(false);
+
+  const performActualLogout = async () => {
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem('moodflow_token');
       localStorage.removeItem('moodflow_user');
@@ -363,6 +373,13 @@ export default function MoodFlowMain() {
     audioSynth.pause();
     setPlaying(false);
     setAuthed(false);
+    setLogoutPending(false);
+  };
+
+  const handleLogout = () => {
+    // Khi người dùng bấm đăng xuất hoặc tắt app: Bật Pop-up đánh giá cảm xúc & lưu CSDL
+    setLogoutPending(true);
+    setFeedbackModalOpen(true);
   };
 
   // If user is not logged in, render AuthScreen
@@ -461,6 +478,25 @@ export default function MoodFlowMain() {
           currentMood={currentMood}
         />
       )}
+
+      {/* Pop-up Đánh giá Cảm xúc khi thoát app / Đăng xuất */}
+      <SessionFeedbackModal
+        visible={feedbackModalOpen}
+        onClose={() => {
+          setFeedbackModalOpen(false);
+          if (logoutPending) {
+            performActualLogout();
+          }
+        }}
+        onFeedbackSubmitted={() => {
+          setFeedbackModalOpen(false);
+          if (logoutPending) {
+            performActualLogout();
+          }
+        }}
+        userId={userId}
+        journey={journey}
+      />
     </View>
   );
 }

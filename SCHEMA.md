@@ -232,6 +232,24 @@ erDiagram
 
 ---
 
+### 2.9. Bảng `session_evaluations` (Khảo sát Cảm xúc & Hiệu quả Trị liệu - Mục 11)
+*Lưu trữ đánh giá khảo sát cảm xúc thực tế sau khi người dùng kết thúc lộ trình hoặc thoát app, phục vụ tính toán Thống kê và tối ưu hóa âm nhạc.*
+
+| Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả |
+| :--- | :--- | :--- | :--- |
+| `id` | `TEXT` | `PRIMARY KEY` | Khóa chính bản đánh giá |
+| `user_id` | `TEXT` | `NOT NULL` | Định danh người nghe |
+| `journey_id` | `UUID` | `REFERENCES journeys(id) ON DELETE SET NULL` | Hành trình vừa nghe |
+| `journey_title`| `TEXT` | | Tên lộ trình đã nghe |
+| `mood_before` | `TEXT` | | Tâm trạng ban đầu lúc chọn (Mood From) |
+| `mood_after` | `TEXT` | `NOT NULL` | Tâm trạng thực tế sau khi nghe xong (Mood After) |
+| `rating` | `INT` | Check: `1..5` | Mức độ hài lòng / hiệu quả trị liệu (1 đến 5 sao) |
+| `feedback_note`| `TEXT` | | Cảm nhận chi tiết của người nghe |
+| `duration_minutes` | `INT` | Default: `30` | Thời gian nghe thực tế |
+| `created_at` | `TIMESTAMPTZ` | Default: `now()` | Thời điểm đánh giá |
+
+---
+
 ## 📂 3. CÁC TẬP TIN SQL ĐÃ TẠO SẴN TRONG THƯ MỤC `supabase/`
 
 Bạn có thể chạy trực tiếp các tập tin này trong **Supabase Dashboard -> SQL Editor**:
