@@ -81,7 +81,7 @@ export default function EditPostModal({
           {/* Header */}
           <View style={styles.headerRow}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-              <Icon name="pencil" size={17} color="#22D3EE" />
+              <Icon name="edit" size={17} color="#22D3EE" />
               <Text style={styles.headerTitle}>Chỉnh sửa bài viết</Text>
             </View>
             <Pressable onPress={onClose} style={styles.closeBtn}>
