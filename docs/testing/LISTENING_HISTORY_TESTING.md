@@ -2,7 +2,7 @@
 
 ## Áp dụng phần backend lên Supabase
 
-Bảng `listening_history` đã tồn tại. Kiểm tra chỉ đọc database hiện tại cho thấy bảng có `id`, `user_id`, `track_id`, `journey_id`, `listened_sec`, `completed`, `skipped`, `played_at`, nhưng chưa có `mood_id`, `stage`, `playback_id`.
+Bảng `listening_history` đã tồn tại. Migration chỉ bổ sung những cột/chỉ mục còn thiếu và hàm RPC, không tạo một bảng mới mang tên `record_listening_history`.
 
 Mở **Supabase Dashboard → dự án → SQL Editor → New query**, dán toàn bộ nội dung file:
 
@@ -16,7 +16,7 @@ Hàm chạy ở backend Supabase, nhận diện tài khoản qua `auth.uid()`, k
 
 Không cần chạy thêm Express server cho hạng mục này. Ứng dụng gọi hàm qua Supabase RPC với phiên đăng nhập hiện tại. Tham khảo [Supabase Database Functions](https://supabase.com/docs/guides/database/functions).
 
-Phiên triển khai chỉ có public API key, không có quyền thực thi DDL trên Supabase; **file SQL chưa được áp dụng lên database thật**. Không đưa service-role key vào ứng dụng để thực hiện bước này.
+Nếu đã chạy đầy đủ migration trước đây thì không cần chạy lại chỉ vì sắp xếp thư mục. Lần sắp xếp này giữ nguyên nội dung SQL và không thực thi trên database thật. Không đưa service-role key vào ứng dụng.
 
 ## Quy tắc ghi
 
@@ -29,19 +29,19 @@ Phiên triển khai chỉ có public API key, không có quyền thực thi DDL 
 - Hai cờ độc lập: một bài rất ngắn có thể vừa đạt 80% vừa bị chủ động chuyển trước 30 giây.
 - Mỗi lượt được ghi tăng `tracks.play_count` thêm 1, kể cả lượt skipped đủ 5 giây.
 - Ghi cho tài khoản Supabase thường hoặc phiên khách ẩn danh. Chế độ xem demo chưa có phiên khách thì chưa ghi lịch sử.
-- Gắn mood/stage từ hành trình đang phát. Journey tạo ở frontend hiện chưa được lưu vào DB nên `journey_id = null`; khi dùng journey đã lưu, truyền ID thật qua historyContext. Nghe từ thư viện để mood/stage/journey null.
+- Gắn mood/stage từ hành trình đang phát. Journey mới tạo chưa nhận ID từ API tự lưu nên lượt nghe dùng `journey_id = null`; khi mở journey đã lưu, truyền ID thật qua historyContext. Nghe từ thư viện để mood/stage/journey null.
 - Hàng đợi gửi lỗi nằm trong bộ nhớ: thử lại khi có lượt mới, app trở về foreground, đăng nhập, hoặc bấm **Thử lưu lại**. Không gửi dữ liệu của tài khoản cũ bằng phiên của tài khoản mới. Đóng/reload hẳn ứng dụng trước khi gửi thành công có thể mất những lượt còn chờ; bản này chưa có hàng đợi offline lưu xuống ổ đĩa.
 
 ## Test trên ứng dụng
 
-1. Chạy file SQL ở trên.
+1. Xác nhận đã chạy đầy đủ migration ở trên, gồm cả hàm RPC và quyền gọi hàm.
 2. Khởi động ứng dụng trên nhánh Deip:
 
    ```powershell
-   npx expo start --web --clear
+   npm run web -- --clear
    ```
 
-3. Có thể dùng tài khoản thật hoặc không cần nhập tài khoản: bật **Authentication → Sign In / Providers → Allow anonymous sign-ins** trong Supabase, lưu cấu hình rồi bấm **Dùng chế độ khách để lưu lịch sử nghe** ở trình phát. Nên bấm nút này trước khi bắt đầu bài test. Kiểm tra chỉ đọc trong phiên triển khai cho thấy tùy chọn anonymous hiện đang tắt; chưa thay đổi cài đặt đó trên server.
+3. Dùng phiên Supabase thường hoặc không cần nhập tài khoản: bật **Authentication → Sign In / Providers → Allow anonymous sign-ins** trong Supabase, lưu cấu hình rồi bấm **Dùng chế độ khách để lưu lịch sử nghe** ở trình phát. Nên bấm nút này trước khi bắt đầu bài test. Tài khoản Express/JWT từ main chưa tự tạo phiên Supabase; đăng nhập backend đơn thuần không đủ để gọi RPC lịch sử.
 4. Chọn MP3 dài hơn 10 giây. Ghi lại play_count hiện tại của bài trong bảng tracks.
 5. Nghe 3 giây rồi chuyển bài: không thêm lịch sử và không tăng play_count.
 6. Nghe 6–10 giây rồi chuyển bài: thêm đúng 1 dòng, listened_sec khoảng số giây thực nghe, skipped=true nếu dưới 30 giây, play_count tăng 1.
@@ -74,34 +74,32 @@ having count(*) > 1;
 ## Kiểm tra tự động
 
 ```powershell
-node --test scripts/player-service.test.cjs scripts/listening-history.test.cjs
-node --test scripts/guest-session.test.cjs
-npx tsc --noEmit
+npm test
+npm run typecheck
 npm run lint
 ```
 
-Kiểm tra SQL thật bằng PostgreSQL nhúng PGlite, cài riêng vào thư mục test (không thêm vào ứng dụng):
+Kiểm tra SQL bằng PostgreSQL nhúng PGlite, dependency nằm riêng trong `supabase/package.json`:
 
 ```powershell
-npm install --prefix .expo/history-db-test --no-package-lock --no-save @electric-sql/pglite
-node --test scripts/listening-history-db.test.cjs
+npm run test:db
 ```
 
 Bộ SQL test chạy trên database cục bộ, không ghi dữ liệu lên Supabase thật. Các yêu cầu đồng thời được xếp qua engine nhúng; không phải bài kiểm tra tải nhiều kết nối PostgreSQL.
 
-Kết quả kiểm tra phiên triển khai: 25 test trình phát/lịch sử đạt, 8 tình huống SQL đạt (Node báo tổng 34 gồm test bao ngoài); TypeScript đạt; lint không có lỗi, còn 7 cảnh báo có sẵn. Export Web/Android/iOS đã qua. Chưa áp dụng SQL hay ghi lịch sử bằng tài khoản thật trên Supabase.
+Sau khi cài dependency bằng `npm run install:all`, chạy các lệnh trên ở thư mục gốc. Các bài test SQL chạy trên database cục bộ; cần thử thêm trên ứng dụng để xác nhận quyền RPC và dữ liệu thật của dự án.
 
 ## File thay đổi
 
 - `supabase/migrations/202610170001_record_listening_history.sql`: backend giao dịch, kiểm tra danh tính, chống trùng và tăng play_count.
-- `services/listening-history-tracker.ts`: đo thời gian nghe và chốt lượt.
-- `services/listening-history-service.ts`: gửi RPC, chờ gửi lại khi lỗi, tách theo tài khoản.
-- `services/guest-session.ts`: tạo phiên khách khi người dùng chọn, dùng lại phiên đã lưu và giữ nguyên tài khoản thường. Phiên khách dùng authenticated role nên vẫn gọi hàm backend hiện có; không cần nới quyền ghi cho anon. Xem [Supabase Anonymous Sign-Ins](https://supabase.com/docs/guides/auth/auth-anonymous). Đăng xuất, xóa dữ liệu trình duyệt hoặc dùng thiết bị khác sẽ tạo danh tính khách khác; không tự gộp lịch sử khách vào tài khoản thường.
-- `services/player-service.ts`: chốt lịch sử ở các điểm kết thúc/chuyển/dừng/lỗi, xử lý replay.
-- `services/audio-engine.types.ts`, `services/audio-engine.ts`, `services/audio-engine.web.ts`: đọc ngay vị trí thực tại thời điểm chuyển/dừng, tránh mất phần giây cuối giữa các sự kiện.
-- `contexts/PlayerContext.tsx`: nối tài khoản thật, thông báo lỗi lưu và retry.
-- `app/index.tsx`: truyền mood/stage/journey, chốt lịch sử trước khi đăng xuất thật khỏi Supabase.
-- `services/journey-generator.ts`: giữ ID mood trong hành trình để không dùng nhầm lựa chọn đã đổi sau đó.
-- `components/moodflow/player/BottomPlayer.tsx`: trạng thái chưa đăng nhập/lỗi lưu và nút thử lại.
-- `scripts/test-support.cjs`, `scripts/player-service.test.cjs`, `scripts/listening-history.test.cjs`, `scripts/listening-history-db.test.cjs`: kiểm tra hồi quy và tích hợp SQL.
-- `LISTENING_HISTORY_TESTING.md`: hướng dẫn này.
+- `frontend/services/listening-history-tracker.ts`: đo thời gian nghe và chốt lượt.
+- `frontend/services/listening-history-service.ts`: gửi RPC, chờ gửi lại khi lỗi, tách theo tài khoản.
+- `frontend/services/guest-session.ts`: tạo phiên khách khi người dùng chọn, dùng lại phiên đã lưu và giữ nguyên tài khoản thường. Phiên khách dùng authenticated role nên vẫn gọi hàm backend hiện có; không cần nới quyền ghi cho anon. Xem [Supabase Anonymous Sign-Ins](https://supabase.com/docs/guides/auth/auth-anonymous). Đăng xuất, xóa dữ liệu trình duyệt hoặc dùng thiết bị khác sẽ tạo danh tính khách khác; không tự gộp lịch sử khách vào tài khoản thường.
+- `frontend/services/player-service.ts`: chốt lịch sử ở các điểm kết thúc/chuyển/dừng/lỗi, xử lý replay.
+- `frontend/services/audio-engine.types.ts`, `frontend/services/audio-engine.ts`, `frontend/services/audio-engine.web.ts`: đọc ngay vị trí thực tại thời điểm chuyển/dừng, tránh mất phần giây cuối giữa các sự kiện.
+- `frontend/contexts/PlayerContext.tsx`: nối tài khoản thật, thông báo lỗi lưu và retry.
+- `frontend/app/index.tsx`: truyền mood/stage/journey, chốt lịch sử trước khi đăng xuất thật khỏi Supabase.
+- `frontend/services/journey-generator.ts`: giữ ID mood trong hành trình để không dùng nhầm lựa chọn đã đổi sau đó.
+- `frontend/components/moodflow/player/BottomPlayer.tsx`: trạng thái chưa đăng nhập/lỗi lưu và nút thử lại.
+- `frontend/tests/player/test-support.cjs`, `frontend/tests/player/player-service.test.cjs`, `frontend/tests/player/listening-history.test.cjs`, `supabase/tests/listening-history-db.test.cjs`: kiểm tra hồi quy và tích hợp SQL.
+- `docs/testing/LISTENING_HISTORY_TESTING.md`: hướng dẫn này. Xem [danh sách đầy đủ sau merge](../PLAYER_HISTORY_FILES.md).

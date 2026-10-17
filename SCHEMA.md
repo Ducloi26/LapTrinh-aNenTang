@@ -234,8 +234,6 @@ erDiagram
 
 ---
 
-<<<<<<< HEAD
-=======
 ### 2.9. Bảng `session_evaluations` (Khảo sát Cảm xúc & Hiệu quả Trị liệu - Mục 11)
 *Lưu trữ đánh giá khảo sát cảm xúc thực tế sau khi người dùng kết thúc lộ trình hoặc thoát app, phục vụ tính toán Thống kê và tối ưu hóa âm nhạc.*
 
@@ -254,7 +252,6 @@ erDiagram
 
 ---
 
->>>>>>> main
 ## 📂 3. CÁC TẬP TIN SQL ĐÃ TẠO SẴN TRONG THƯ MỤC `supabase/`
 
 Bạn có thể chạy trực tiếp các tập tin này trong **Supabase Dashboard -> SQL Editor**:

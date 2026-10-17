@@ -54,6 +54,7 @@ interface PlayerContextValue {
   startGuestSession: () => Promise<void>;
   guestSessionLoading: boolean;
   guestSessionError: string | null;
+  queueEndCount: number;
 }
 
 const PlayerContext = createContext<PlayerContextValue | null>(null);
@@ -65,6 +66,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [historyEnabled, setHistoryEnabled] = useState(false);
   const [guestSessionLoading, setGuestSessionLoading] = useState(false);
   const [guestSessionError, setGuestSessionError] = useState<string | null>(null);
+  const [queueEndCount, setQueueEndCount] = useState(0);
   const [queue, setQueue] = useState<PlayerQueueEntry[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [status, setStatus] = useState<PlaybackProgress>({ position: 0, duration: 0, isPlaying: false, isBuffering: false });
@@ -135,6 +137,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       else {
         wantsPlay.current = false;
         service.pause();
+        setQueueEndCount((count) => count + 1);
       }
     });
     return () => {
@@ -268,8 +271,9 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     presetId, volume, error, play, pause, togglePlay, stop,
     historyError, historyEnabled, retryHistory,
     startGuestSession, guestSessionLoading, guestSessionError,
+    queueEndCount,
     setPreset, setVolume, seekTo, playTrack, previousTrack, nextTrack, initializeLibrary,
-  }), [queue, currentIndex, status, presetId, volume, error, play, pause, togglePlay, stop, setPreset, setVolume, seekTo, playTrack, previousTrack, nextTrack, initializeLibrary, historyError, historyEnabled, retryHistory, startGuestSession, guestSessionLoading, guestSessionError]);
+  }), [queue, currentIndex, status, presetId, volume, error, play, pause, togglePlay, stop, setPreset, setVolume, seekTo, playTrack, previousTrack, nextTrack, initializeLibrary, historyError, historyEnabled, retryHistory, startGuestSession, guestSessionLoading, guestSessionError, queueEndCount]);
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
 }

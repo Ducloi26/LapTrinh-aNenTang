@@ -13,63 +13,23 @@ import { usePlayer } from '@/contexts/PlayerContext';
 import Icon from '@/components/moodflow/shared/Icon';
 import SoundWave from '@/components/moodflow/player/SoundWave';
 
-<<<<<<< HEAD:components/moodflow/player/BottomPlayer.tsx
 interface BottomPlayerProps {
   bottomOffset: number;
   onOpenNowPlaying: () => void;
+  onNext?: () => void;
+  onPrev?: () => void;
 }
 
 function formatTime(seconds: number) {
   const safeSeconds = Math.max(0, Math.floor(seconds));
   return `${Math.floor(safeSeconds / 60)}:${String(safeSeconds % 60).padStart(2, '0')}`;
 }
-=======
-<<<<<<< HEAD:components/moodflow/player/BottomPlayer.tsx
-// interface BottomPlayerProps {
-//   nowPlaying: Track | null;
-//   playing: boolean;
-//   setPlaying: () => void;
-//   stageInfo?: { index: number; total: number; title: string };
-//   onOpenNowPlaying: () => void;
-// }
-
-// export default function BottomPlayer({
-//   nowPlaying,
-//   playing,
-//   setPlaying,
-//   stageInfo,
-//   onOpenNowPlaying,
-// }: BottomPlayerProps) {
-//   const spinValue = useRef(new Animated.Value(0)).current;
-=======
-interface BottomPlayerProps {
-  nowPlaying: Track | null;
-  playing: boolean;
-  setPlaying: () => void;
-  stageInfo?: { index: number; total: number; title: string };
-  onOpenNowPlaying: () => void;
-  onNext?: () => void;
-  onPrev?: () => void;
-  onFinishJourney?: () => void;
-}
-
-export default function BottomPlayer({
-  nowPlaying,
-  playing,
-  setPlaying,
-  stageInfo,
-  onOpenNowPlaying,
-  onNext,
-  onPrev,
-  onFinishJourney,
-}: BottomPlayerProps) {
-  const spinValue = useRef(new Animated.Value(0)).current;
->>>>>>> bd07347ee7ce77263b32c5ea829322bb9a8e0027:frontend/components/moodflow/player/BottomPlayer.tsx
->>>>>>> main:frontend/components/moodflow/player/BottomPlayer.tsx
 
 export default function BottomPlayer({
   bottomOffset,
   onOpenNowPlaying,
+  onNext,
+  onPrev,
 }: BottomPlayerProps) {
   const {
     nowPlaying,
@@ -114,7 +74,6 @@ export default function BottomPlayer({
     volumeTrackRef.current?.measureInWindow((left) => setVolumeLeft(left));
   };
 
-<<<<<<< HEAD:components/moodflow/player/BottomPlayer.tsx
   const handleProgressPress = (event: { nativeEvent: { locationX: number; pageX: number } }) => {
     const { locationX, pageX } = event.nativeEvent;
     const clickX = Number.isFinite(locationX)
@@ -126,47 +85,6 @@ export default function BottomPlayer({
     const position = Math.max(0, Math.min(progressWidth, clickX));
     seekTo((position / progressWidth) * durationSeconds);
   };
-=======
-<<<<<<< HEAD:components/moodflow/player/BottomPlayer.tsx
-//       {/* Center Controls & Progress */}
-//       <View style={styles.centerSection}>
-//         <View style={styles.controlRow}>
-//           <Pressable style={styles.iconBtn}>
-//             <Icon name="skipback" size={16} color={COLORS.muted} />
-//           </Pressable>
-//           <Pressable onPress={setPlaying} style={styles.playBtn}>
-//             <Icon
-//               name={playing ? 'pause' : 'play'}
-//               size={15}
-//               color="#0A0D16"
-//             />
-//           </Pressable>
-//           <Pressable style={styles.iconBtn}>
-//             <Icon name="skipforward" size={16} color={COLORS.muted} />
-//           </Pressable>
-//           <SoundWave playing={playing} />
-//         </View>
-=======
-      {/* Center Controls & Progress */}
-      <View style={styles.centerSection}>
-        <View style={styles.controlRow}>
-          <Pressable onPress={onPrev} style={styles.iconBtn}>
-            <Icon name="skipback" size={16} color={COLORS.muted} />
-          </Pressable>
-          <Pressable onPress={setPlaying} style={styles.playBtn}>
-            <Icon
-              name={playing ? 'pause' : 'play'}
-              size={15}
-              color="#0A0D16"
-            />
-          </Pressable>
-          <Pressable onPress={onNext} style={styles.iconBtn}>
-            <Icon name="skipforward" size={16} color={COLORS.muted} />
-          </Pressable>
-          <SoundWave playing={playing} />
-        </View>
->>>>>>> bd07347ee7ce77263b32c5ea829322bb9a8e0027:frontend/components/moodflow/player/BottomPlayer.tsx
->>>>>>> main:frontend/components/moodflow/player/BottomPlayer.tsx
 
   const handleVolumePress = (event: { nativeEvent: { locationX: number; pageX: number } }) => {
     const { locationX, pageX } = event.nativeEvent;
@@ -179,7 +97,6 @@ export default function BottomPlayer({
     setVolume(Math.max(0, Math.min(1, clickX / volumeWidth)));
   };
 
-<<<<<<< HEAD:components/moodflow/player/BottomPlayer.tsx
   return (
     <View style={[styles.footer, { bottom: bottomOffset }]}>
       <View style={styles.mainRow}>
@@ -212,7 +129,7 @@ export default function BottomPlayer({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel={elapsedSeconds > 3 ? 'Quay lại đầu bài' : 'Bài trước'}
-            onPress={previousTrack}
+            onPress={onPrev || previousTrack}
             style={styles.controlBtn}
           >
             <Icon name="skipback" size={17} color={COLORS.muted} />
@@ -232,7 +149,7 @@ export default function BottomPlayer({
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Bài tiếp theo"
-            onPress={nextTrack}
+            onPress={onNext || nextTrack}
             style={styles.controlBtn}
           >
             <Icon name="skipforward" size={17} color={COLORS.muted} />
@@ -361,171 +278,15 @@ export default function BottomPlayer({
           {error}
         </Text>
       ) : null}
-=======
-<<<<<<< HEAD:components/moodflow/player/BottomPlayer.tsx
-//       {/* Right Controls */}
-//       <View style={styles.rightSection}>
-//         {stageInfo && (
-//           <Text style={styles.stageText}>
-//             Giai đoạn {stageInfo.index + 1}/{stageInfo.total} — {stageInfo.title}
-//           </Text>
-//         )}
-//         <Pressable style={styles.rightBtn}>
-//           <Icon name="volume" size={16} color={COLORS.muted} />
-//         </Pressable>
-//         <Pressable onPress={onOpenNowPlaying} style={styles.rightBtn}>
-//           <Icon name="maximize" size={16} color={COLORS.muted} />
-//         </Pressable>
-//       </View>
-//     </View>
-//   );
-// }
-
-// const styles = StyleSheet.create({
-//   footer: {
-//     position: 'absolute',
-//     left: 0,
-//     right: 0,
-//     bottom: 0,
-//     height: 82,
-//     backgroundColor: 'rgba(17, 22, 42, 0.95)',
-//     borderTopWidth: 1,
-//     borderTopColor: COLORS.border,
-//     flexDirection: 'row',
-//     alignItems: 'center',
-//     paddingHorizontal: 20,
-//     zIndex: 30,
-//   },
-//   trackInfo: {
-//     flexDirection: 'row',
-//     alignItems: 'center',
-//     width: 240,
-//     gap: 12,
-//   },
-//   coverWrap: {
-//     width: 46,
-//     height: 46,
-//     borderRadius: 10,
-//     overflow: 'hidden',
-//     backgroundColor: COLORS.surface2,
-//     alignItems: 'center',
-//     justifyContent: 'center',
-//   },
-//   coverImg: {
-//     width: '100%',
-//     height: '100%',
-//   },
-//   trackTextWrap: {
-//     flex: 1,
-//     minWidth: 0,
-//   },
-//   trackTitle: {
-//     fontSize: 13.5,
-//     fontWeight: '700',
-//     color: COLORS.text,
-//   },
-//   trackArtist: {
-//     fontSize: 11.5,
-//     color: COLORS.faint,
-//     marginTop: 2,
-//   },
-//   centerSection: {
-//     flex: 1,
-//     maxWidth: 480,
-//     alignItems: 'center',
-//     marginHorizontal: 'auto',
-//     gap: 6,
-//   },
-//   controlRow: {
-//     flexDirection: 'row',
-//     alignItems: 'center',
-//     gap: 16,
-//   },
-//   iconBtn: {
-//     padding: 6,
-//   },
-//   playBtn: {
-//     width: 34,
-//     height: 34,
-//     borderRadius: 17,
-//     backgroundColor: COLORS.text,
-//     alignItems: 'center',
-//     justifyContent: 'center',
-//   },
-//   progressBarBg: {
-//     width: '100%',
-//     height: 3,
-//     borderRadius: 3,
-//     backgroundColor: COLORS.surface2,
-//     overflow: 'hidden',
-//   },
-//   progressBarFill: {
-//     height: '100%',
-//     borderRadius: 3,
-//   },
-//   rightSection: {
-//     flexDirection: 'row',
-//     alignItems: 'center',
-//     width: 240,
-//     justifyContent: 'flex-end',
-//     gap: 14,
-//   },
-//   stageText: {
-//     fontSize: 11.5,
-//     color: COLORS.faint,
-//   },
-//   rightBtn: {
-//     padding: 4,
-//   },
-// });
-=======
-      {/* Right Controls */}
-      <View style={styles.rightSection}>
-        {onFinishJourney && (
-          <Pressable onPress={onFinishJourney} style={styles.finishBtn}>
-            <Text style={styles.finishBtnText}>🏁 Đánh giá</Text>
-          </Pressable>
-        )}
-        {stageInfo && (
-          <Text style={styles.stageText}>
-            Giai đoạn {stageInfo.index + 1}/{stageInfo.total} — {stageInfo.title}
-          </Text>
-        )}
-        <Pressable style={styles.rightBtn}>
-          <Icon name="volume" size={16} color={COLORS.muted} />
-        </Pressable>
-        <Pressable onPress={onOpenNowPlaying} style={styles.rightBtn}>
-          <Icon name="maximize" size={16} color={COLORS.muted} />
-        </Pressable>
-      </View>
->>>>>>> main:frontend/components/moodflow/player/BottomPlayer.tsx
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-<<<<<<< HEAD:components/moodflow/player/BottomPlayer.tsx
-=======
-  finishBtn: {
-    backgroundColor: 'rgba(34, 211, 238, 0.15)',
-    borderWidth: 1,
-    borderColor: 'rgba(34, 211, 238, 0.4)',
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 8,
-    marginRight: 6,
-  },
-  finishBtnText: {
-    color: '#22D3EE',
-    fontSize: 11.5,
-    fontWeight: '700',
-  },
->>>>>>> main:frontend/components/moodflow/player/BottomPlayer.tsx
   footer: {
     position: 'absolute',
     left: 0,
     right: 0,
-<<<<<<< HEAD:components/moodflow/player/BottomPlayer.tsx
     minHeight: 132,
     backgroundColor: 'rgba(17, 22, 42, 0.97)',
     borderTopWidth: 1,
@@ -556,49 +317,19 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     overflow: 'hidden',
     backgroundColor: COLORS.surface2,
-=======
-    bottom: 0,
-    height: 82,
-    backgroundColor: 'rgba(17, 22, 42, 0.95)',
-    borderTopWidth: 1,
-    borderTopColor: COLORS.border,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    zIndex: 30,
-  },
-  trackInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: 240,
-    gap: 12,
-  },
-  coverWrap: {
-    width: 46,
-    height: 46,
-    borderRadius: 10,
-    overflow: 'hidden',
-    backgroundColor: COLORS.surface2,
-    alignItems: 'center',
-    justifyContent: 'center',
->>>>>>> main:frontend/components/moodflow/player/BottomPlayer.tsx
   },
   coverImg: {
     width: '100%',
     height: '100%',
   },
-<<<<<<< HEAD:components/moodflow/player/BottomPlayer.tsx
   coverPlaying: {
     transform: [{ scale: 1.04 }],
   },
-=======
->>>>>>> main:frontend/components/moodflow/player/BottomPlayer.tsx
   trackTextWrap: {
     flex: 1,
     minWidth: 0,
   },
   trackTitle: {
-<<<<<<< HEAD:components/moodflow/player/BottomPlayer.tsx
     color: COLORS.text,
     fontSize: 13,
     fontWeight: '700',
@@ -624,31 +355,6 @@ const styles = StyleSheet.create({
     height: 30,
     alignItems: 'center',
     justifyContent: 'center',
-=======
-    fontSize: 13.5,
-    fontWeight: '700',
-    color: COLORS.text,
-  },
-  trackArtist: {
-    fontSize: 11.5,
-    color: COLORS.faint,
-    marginTop: 2,
-  },
-  centerSection: {
-    flex: 1,
-    maxWidth: 480,
-    alignItems: 'center',
-    marginHorizontal: 'auto',
-    gap: 6,
-  },
-  controlRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 16,
-  },
-  iconBtn: {
-    padding: 6,
->>>>>>> main:frontend/components/moodflow/player/BottomPlayer.tsx
   },
   playBtn: {
     width: 34,
@@ -658,7 +364,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-<<<<<<< HEAD:components/moodflow/player/BottomPlayer.tsx
   stopIcon: {
     width: 11,
     height: 11,
@@ -765,32 +470,3 @@ const styles = StyleSheet.create({
     fontSize: 11,
   },
 });
-=======
-  progressBarBg: {
-    width: '100%',
-    height: 3,
-    borderRadius: 3,
-    backgroundColor: COLORS.surface2,
-    overflow: 'hidden',
-  },
-  progressBarFill: {
-    height: '100%',
-    borderRadius: 3,
-  },
-  rightSection: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    width: 240,
-    justifyContent: 'flex-end',
-    gap: 14,
-  },
-  stageText: {
-    fontSize: 11.5,
-    color: COLORS.faint,
-  },
-  rightBtn: {
-    padding: 4,
-  },
-});
->>>>>>> bd07347ee7ce77263b32c5ea829322bb9a8e0027:frontend/components/moodflow/player/BottomPlayer.tsx
->>>>>>> main:frontend/components/moodflow/player/BottomPlayer.tsx

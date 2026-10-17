@@ -94,7 +94,7 @@ export default function HomePage({
               <View style={{ flex: 1 }}>
                 <Text style={styles.aiQuickTitle}>Trợ lý Âm nhạc Thông minh (MoodFlow AI)</Text>
                 <Text style={styles.aiQuickSub} numberOfLines={1}>
-                  Ví dụ: "Hôm nay deadline nhiều mệt mỏi", "Vừa chia tay cần tĩnh tâm"...
+                  Ví dụ: &quot;Hôm nay deadline nhiều mệt mỏi&quot;, &quot;Vừa chia tay cần tĩnh tâm&quot;...
                 </Text>
               </View>
             </View>

@@ -8,7 +8,10 @@
     "web": "expo start --web",
     "android": "expo start --android",
     "ios": "expo start --ios",
-    "lint": "expo lint"
+    "lint": "expo lint",
+    "test": "node --test tests/player/*.test.cjs",
+    "typecheck": "tsc --noEmit",
+    "generate:binaural": "node scripts/generate-binaural.cjs"
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.3",
@@ -18,6 +21,8 @@
     "@react-navigation/native": "^7.1.8",
     "@supabase/supabase-js": "^2.117.2",
     "expo": "~54.0.36",
+    "expo-asset": "~12.0.13",
+    "expo-audio": "~1.1.1",
     "expo-constants": "~18.0.13",
     "expo-font": "~14.0.12",
     "expo-haptics": "~15.0.8",

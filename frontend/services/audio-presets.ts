@@ -68,8 +68,9 @@ export function presetForMoodActivity(
   if (activityId === 'sleep' || activityId === 'rest') return 'sleep';
   if (
     activityId === 'relax' ||
+    activityId === 'meditation' ||
     activityId === 'walking' ||
-    ['calm', 'dreamy', 'sad'].includes(moodId)
+    ['calm', 'dreamy', 'sad', 'calm_unwind', 'heartbreak_healing', 'melancholy_chill', 'night_serenade'].includes(moodId)
   ) {
     return 'relax';
   }

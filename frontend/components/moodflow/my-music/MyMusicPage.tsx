@@ -33,6 +33,7 @@ interface SavedJourney {
 }
 
 interface MyMusicPageProps {
+  tracks?: Track[];
   onPlayTrack?: (t: Track) => void;
   onSelectJourney?: (j: any) => void;
   onGoToHome?: () => void;
@@ -42,6 +43,7 @@ export default function MyMusicPage({
   onPlayTrack,
   onSelectJourney,
   onGoToHome,
+  tracks = [],
 }: MyMusicPageProps) {
   const [tab, setTab] = useState('journeys');
   const [journeys, setJourneys] = useState<SavedJourney[]>([]);
@@ -111,6 +113,11 @@ export default function MyMusicPage({
     if (onSelectJourney) {
       // Chuẩn hóa định dạng Journey để index.tsx có thể nhận dạng
       const formattedJourney = {
+        id: savedJ.id,
+        moodFromId: savedJ.mood_from,
+        moodToId: savedJ.mood_to,
+        moodFrom: moodById(savedJ.mood_from || 'deep_focus'),
+        moodTo: moodById(savedJ.mood_to || 'calm_unwind'),
         totalMin: savedJ.duration_minutes || 30,
         activityLabel: savedJ.activity || 'Trị liệu tâm lý',
         stages: savedJ.stages || [
@@ -149,12 +156,7 @@ export default function MyMusicPage({
   };
 
   // Mẫu bài hát dự phòng nếu chưa có bài like
-  const fallbackLikedTracks: Track[] = [
-    TRACK_POOL.acknowledge?.[0],
-    TRACK_POOL.transition?.[0],
-    TRACK_POOL.elevate?.[0],
-    TRACK_POOL.transcendence?.[0],
-  ].filter(Boolean) as Track[];
+  const fallbackLikedTracks: Track[] = tracks;
 
   const activeLikedList = likedTracks.length > 0 ? likedTracks : fallbackLikedTracks;
 
@@ -216,7 +218,7 @@ export default function MyMusicPage({
               <Icon name="bookmark" size={32} color={COLORS.faint} />
               <Text style={styles.emptyTitle}>Chưa có Hành trình nào được lưu</Text>
               <Text style={styles.emptySub}>
-                Bạn có thể tạo một Music Journey ở Trang chủ, sau đó bấm nút "Lưu hành trình" để lưu lại vào CSDL và nghe lại bất cứ lúc nào.
+                Bạn có thể tạo một Music Journey ở Trang chủ, sau đó bấm nút &quot;Lưu hành trình&quot; để lưu lại vào CSDL và nghe lại bất cứ lúc nào.
               </Text>
               {onGoToHome ? (
                 <Pressable onPress={onGoToHome} style={styles.createBtn}>

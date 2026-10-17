@@ -4,7 +4,6 @@ import {
   JOURNEY_4_STAGES,
   TRACK_POOL,
   ACTIVITIES,
-  StageTemplate,
 } from '@/constants/moodflow';
 
 export interface Stage {
@@ -19,6 +18,9 @@ export interface Stage {
 }
 
 export interface Journey {
+  id?: string;
+  moodFromId?: string;
+  moodToId?: string;
   stages: Stage[];
   totalMin: number;
   moodFrom: Mood;
@@ -72,18 +74,19 @@ export function generateJourney(params: {
   moodTo: Mood;
   activity: string;
   duration: number;
+  trackPool?: Record<string, Track[]>;
 }): Journey {
-  const { moodFrom, moodTo, activity, duration } = params;
+  const { moodFrom, moodTo, activity, duration, trackPool = TRACK_POOL } = params;
   let t = 0;
 
   const stages: Stage[] = JOURNEY_4_STAGES.map((tpl, i) => {
     const stageMin = Math.max(3, Math.round(duration * tpl.share));
     const start = t;
     t += stageMin;
-    const pool = TRACK_POOL[tpl.pool] || TRACK_POOL.acknowledge;
+    const pool = trackPool[tpl.pool]?.length ? trackPool[tpl.pool] : Object.values(trackPool).flat();
     
     // Mỗi giai đoạn chọn từ 1 đến 2 bài hát phù hợp thời lượng
-    const trackCount = Math.max(1, Math.min(pool.length, Math.round(stageMin / 10)));
+    const trackCount = Math.min(pool.length, Math.max(1, Math.round(stageMin / 10)));
 
     const tracks: Track[] = Array.from({ length: trackCount }, (_, idx) => {
       const base = pool[idx % pool.length];
@@ -111,6 +114,8 @@ export function generateJourney(params: {
   const act = ACTIVITIES.find((a) => a.id === activity);
 
   return {
+    moodFromId: moodFrom.id,
+    moodToId: moodTo.id,
     stages,
     totalMin: t,
     moodFrom,

@@ -93,6 +93,8 @@ export const NAV_ITEMS: NavItem[] = [
 ];
 
 export interface Track {
+  storagePath?: string;
+  storageBucket?: string;
   id?: string;
   title: string;
   artist: string;

@@ -3,7 +3,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { test } = require('node:test');
 const { loadModule } = require('./test-support.cjs');
-const root = path.join(__dirname, '..');
+const root = path.resolve(__dirname, '../..');
 
 function fixture() {
   const engines = [];
@@ -159,7 +159,7 @@ test('database catalog maps audio_url and makes small libraries usable in every 
   assert.equal(catalog.tracks[0].audioUrl, 'https://project.supabase.co/song.mp3');
   assert.equal(catalog.tracks[0].duration, '1:05');
   assert.equal(catalog.tracks[0].energy, 0);
-  assert.equal(catalog.pools.romantic[0].id, '1');
+  assert.equal(catalog.pools.transcendence[0].id, '1');
 });
 
 test('catalog validates placeholder config and distinguishes connection, permissions, auth and schema errors', () => {

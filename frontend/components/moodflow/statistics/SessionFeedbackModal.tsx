@@ -35,7 +35,7 @@ export default function SessionFeedbackModal({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const moodBefore = journey?.mood_from || 'anxious';
+  const moodBefore = journey?.moodFromId || journey?.mood_from || 'deep_focus';
   const beforeMoodObj = moodById(moodBefore);
 
   const ratingDescriptions: { [key: number]: string } = {
@@ -62,7 +62,7 @@ export default function SessionFeedbackModal({
           moodAfter: selectedMoodAfter,
           rating,
           feedbackNote: feedbackNote.trim(),
-          durationMinutes: journey?.duration_minutes || 30,
+          durationMinutes: journey?.totalMin || journey?.duration_minutes || 30,
         }),
       });
 

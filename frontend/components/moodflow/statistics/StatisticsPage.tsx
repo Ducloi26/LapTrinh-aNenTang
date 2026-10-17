@@ -214,7 +214,7 @@ export default function StatisticsPage({
                       </View>
 
                       {e.feedback_note ? (
-                        <Text style={styles.evalNoteText}>"{e.feedback_note}"</Text>
+                        <Text style={styles.evalNoteText}>&quot;{e.feedback_note}&quot;</Text>
                       ) : null}
                     </View>
                   );

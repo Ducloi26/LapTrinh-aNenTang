@@ -27,12 +27,12 @@ export function mapTrackCatalog(rows: TrackRow[]): MusicCatalog {
       artist: String(row.artist || row.artist_name || 'Nghệ sĩ'),
       genre: String(row.genre || 'Music'),
       duration: durationLabel(row.duration ?? row.duration_seconds ?? row.duration_sec),
-      cover: String(row.cover_url || TRACK_POOL.focus[0].cover),
+      cover: String(row.cover_url || TRACK_POOL.acknowledge[0].cover),
       audioUrl: row.audio_url.trim(),
       energy,
       bpm: Number(row.tempo_bpm ?? row.bpm) || undefined,
     };
-    const pool = typeof row.pool_key === 'string' ? row.pool_key : energy < 35 ? 'calmdown' : energy > 65 ? 'energize' : 'focus';
+    const pool = typeof row.pool_key === 'string' ? row.pool_key : energy < 35 ? 'acknowledge' : energy > 65 ? 'elevate' : 'transition';
     (pools[pool] ??= []).push(track);
     tracks.push(track);
   }

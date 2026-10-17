@@ -1,38 +1,31 @@
 @echo off
 chcp 65001 > nul
+cd /d "%~dp0"
 echo ==========================================================
 echo 🚀 BẮT ĐẦU CÀI ĐẶT DỰ ÁN MOODFLOW (TỰ ĐỘNG)
 echo ==========================================================
 
 echo.
-echo 📦 [1/3] Đang cài đặt thư viện cho Thư mục Gốc...
-call npm install
-
-echo.
-echo 📦 [2/3] Đang cài đặt thư viện cho Backend (Node.js Express)...
-cd backend
-call npm install
-cd ..
-
-echo.
-echo 📦 [3/3] Đang cài đặt thư viện cho Frontend (Expo React Native)...
-cd frontend
-call npm install
-cd ..
+echo 📦 Đang cài thư viện frontend, backend và kiểm thử database...
+call npm run install:all
+if errorlevel 1 (
+    echo Cài đặt thất bại. Kiểm tra thông báo lỗi phía trên.
+    pause
+    exit /b 1
+)
 
 echo.
 echo ⚙️ Kiểm tra cấu hình môi trường (.env)...
-if not exist .env (
-    if exist .env.example (
-        copy .env.example .env > nul
-        echo ✅ Đã tự động tạo file .env từ .env.example
-    )
-)
 if not exist backend\.env (
     if exist .env copy .env backend\.env > nul
 )
 if not exist frontend\.env (
-    if exist .env copy .env frontend\.env > nul
+    if exist .env (
+        copy .env frontend\.env > nul
+    ) else (
+        copy frontend\.env.example frontend\.env > nul
+        echo Điền URL và public API key của Supabase vào frontend\.env trước khi chạy.
+    )
 )
 
 echo.

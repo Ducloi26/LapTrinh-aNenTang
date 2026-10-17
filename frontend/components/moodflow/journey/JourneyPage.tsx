@@ -33,7 +33,7 @@ export default function JourneyPage({
         <Icon name="sparkles" size={32} color={COLORS.faint} />
         <Text style={styles.emptyTitle}>Chưa có hành trình nào</Text>
         <Text style={styles.emptySub}>
-          Quay lại Trang chủ, chọn tâm trạng và nhấn "Tạo Music Journey của tôi"
+          Quay lại Trang chủ, chọn tâm trạng và nhấn &quot;Tạo Music Journey của tôi&quot;
           để bắt đầu.
         </Text>
       </View>

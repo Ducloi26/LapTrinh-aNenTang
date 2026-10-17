@@ -49,10 +49,8 @@ data/
 KE_HOACH_CHI_TIET.*
 THIET_KE_*
 
-# Database & scripts phụ trợ (không push lên git)
+# Bản nháp schema cục bộ
 DATABASE_SCHEMA*
-supabase/
-scripts/
 
 
 # typescript
@@ -72,9 +70,11 @@ CLAUDE.md
 .claude/
 .gemini/
 *.plan.md
-package-lock.json
-package.json
-PLAYER_TESTING.md
 
 
 
+
+
+# Share safe configuration templates
+!frontend/.env.example
+/supabase
