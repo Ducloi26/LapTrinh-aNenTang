@@ -30,9 +30,29 @@ yarn-error.*
 .DS_Store
 *.pem
 
-# local env files
+# local env files (tuyệt đối không push lên git)
 .env
+
 .env.local
+
+
+.env*
+**/.env
+**/.env*
+*.local
+backend/data/
+data/
+
+# Tài liệu kế hoạch & word (không push lên git)
+*.docx
+*.doc
+KE_HOACH_CHI_TIET.*
+THIET_KE_*
+
+# Database & scripts phụ trợ (không push lên git)
+DATABASE_SCHEMA*
+supabase/
+scripts/
 
 
 # typescript
@@ -45,6 +65,7 @@ example
 /android
 
 
+
 # AI agents & tools
 AGENTS.md
 CLAUDE.md
@@ -53,6 +74,7 @@ CLAUDE.md
 *.plan.md
 package-lock.json
 package.json
+
 
 
 
