@@ -1,8 +1,10 @@
 {
-  "name": "ltdntcode",
-  "main": "expo-router/entry",
+  "name": "moodflow-workspace",
   "version": "1.0.0",
+  "description": "MoodFlow - Ứng dụng Trị liệu Âm nhạc Cá nhân hóa Đa nền tảng",
+  "private": true,
   "scripts": {
+
     "start": "expo start",
     "reset-project": "node ./scripts/reset-project.js",
     "android": "expo start --android",
@@ -51,3 +53,4 @@
   },
   "private": true
 }
+   

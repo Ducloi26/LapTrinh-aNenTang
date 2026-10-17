@@ -33,6 +33,8 @@ interface NowPlayingModalProps {
   currentMood: Mood;
   stageInfo?: { index: number; total: number; title: string };
   onClose: () => void;
+  onNext?: () => void;
+  onPrev?: () => void;
 }
 
 export default function NowPlayingModal({
@@ -45,6 +47,8 @@ export default function NowPlayingModal({
   currentMood,
   stageInfo,
   onClose,
+  onNext,
+  onPrev,
 }: NowPlayingModalProps) {
   const { width } = useWindowDimensions();
   const isMobile = width < 768;
@@ -231,6 +235,10 @@ export default function NowPlayingModal({
             </View>
 
             <View style={styles.actionRow}>
+              <Pressable onPress={onPrev} style={styles.modalControlBtn}>
+                <Icon name="skipback" size={20} color="#FFF" />
+              </Pressable>
+
               <Pressable onPress={onTogglePlay} style={styles.mainPlayBtn}>
                 <LinearGradient
                   colors={currentMood.colors}
@@ -247,6 +255,10 @@ export default function NowPlayingModal({
                     {isPlaying ? 'Tạm dừng' : 'Phát tiếp'}
                   </Text>
                 </LinearGradient>
+              </Pressable>
+
+              <Pressable onPress={onNext} style={styles.modalControlBtn}>
+                <Icon name="skipforward" size={20} color="#FFF" />
               </Pressable>
             </View>
           </View>
@@ -507,6 +519,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 16,
+  },
+  modalControlBtn: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: 'rgba(255, 255, 255, 0.08)',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.12)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   mainPlayBtn: {
     borderRadius: 14,

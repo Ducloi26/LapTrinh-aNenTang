@@ -99,6 +99,9 @@ erDiagram
 | `email` | `VARCHAR(255)` | `UNIQUE`, `NOT NULL` | Địa chỉ email đăng nhập (chuẩn hóa chữ thường) |
 | `password_hash` | `TEXT` | `NOT NULL` | Mật khẩu đã băm một chiều an toàn bằng Bcrypt |
 | `display_name` | `VARCHAR(100)` | `NOT NULL`, Default: `'Người nghe'` | Tên hiển thị của người dùng trên giao diện |
+
+| `role` | `VARCHAR(20)` | `NOT NULL`, Default: `'user'`, Check: `'user', 'admin'` | Phân quyền tài khoản: `'user'` (Người nghe thông thường) hoặc `'admin'` (Quản trị viên hệ thống) |
+
 | `created_at` | `TIMESTAMPTZ` | Default: `now()` | Thời điểm tạo tài khoản |
 | `updated_at` | `TIMESTAMPTZ` | Default: `now()` | Thời điểm cập nhật gần nhất |
 
@@ -231,6 +234,27 @@ erDiagram
 
 ---
 
+<<<<<<< HEAD
+=======
+### 2.9. Bảng `session_evaluations` (Khảo sát Cảm xúc & Hiệu quả Trị liệu - Mục 11)
+*Lưu trữ đánh giá khảo sát cảm xúc thực tế sau khi người dùng kết thúc lộ trình hoặc thoát app, phục vụ tính toán Thống kê và tối ưu hóa âm nhạc.*
+
+| Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả |
+| :--- | :--- | :--- | :--- |
+| `id` | `TEXT` | `PRIMARY KEY` | Khóa chính bản đánh giá |
+| `user_id` | `TEXT` | `NOT NULL` | Định danh người nghe |
+| `journey_id` | `UUID` | `REFERENCES journeys(id) ON DELETE SET NULL` | Hành trình vừa nghe |
+| `journey_title`| `TEXT` | | Tên lộ trình đã nghe |
+| `mood_before` | `TEXT` | | Tâm trạng ban đầu lúc chọn (Mood From) |
+| `mood_after` | `TEXT` | `NOT NULL` | Tâm trạng thực tế sau khi nghe xong (Mood After) |
+| `rating` | `INT` | Check: `1..5` | Mức độ hài lòng / hiệu quả trị liệu (1 đến 5 sao) |
+| `feedback_note`| `TEXT` | | Cảm nhận chi tiết của người nghe |
+| `duration_minutes` | `INT` | Default: `30` | Thời gian nghe thực tế |
+| `created_at` | `TIMESTAMPTZ` | Default: `now()` | Thời điểm đánh giá |
+
+---
+
+>>>>>>> main
 ## 📂 3. CÁC TẬP TIN SQL ĐÃ TẠO SẴN TRONG THƯ MỤC `supabase/`
 
 Bạn có thể chạy trực tiếp các tập tin này trong **Supabase Dashboard -> SQL Editor**:

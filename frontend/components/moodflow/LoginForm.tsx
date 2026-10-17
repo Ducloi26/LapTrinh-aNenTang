@@ -15,7 +15,7 @@ import { supabase } from '@/lib/supabase';
 interface Props {
   moodColors: GradientColors;
   onSwitchToRegister: () => void;
-  onLoginSuccess: () => void;
+  onLoginSuccess: (name?: string) => void;
 }
 
 export default function LoginForm({ moodColors, onSwitchToRegister, onLoginSuccess }: Props) {
@@ -35,13 +35,31 @@ export default function LoginForm({ moodColors, onSwitchToRegister, onLoginSucce
     setLoading(true);
     setAuthError(null);
 
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    try {
+      // 1. Gửi yêu cầu qua Backend Express API server (Port 5000)
+      const res = await fetch('http://localhost:5000/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const data = await res.json();
 
-    setLoading(false);
-    if (error) {
-      setAuthError('Email hoặc mật khẩu không đúng. Vui lòng thử lại.');
-    } else {
-      onLoginSuccess();
+      if (!res.ok || !data.success) {
+        setAuthError(data.error || 'Email hoặc mật khẩu không chính xác.');
+        return;
+      }
+
+      // 2. Lưu JWT Token và hồ sơ người dùng
+      if (data.token && typeof localStorage !== 'undefined') {
+        localStorage.setItem('moodflow_token', data.token);
+        localStorage.setItem('moodflow_user', JSON.stringify(data.user));
+      }
+
+      onLoginSuccess(data.user?.displayName || 'Người nghe');
+    } catch (err: any) {
+      setAuthError(err.message || 'Không thể kết nối đến máy chủ Backend.');
+    } finally {
+      setLoading(false);
     }
   };
 

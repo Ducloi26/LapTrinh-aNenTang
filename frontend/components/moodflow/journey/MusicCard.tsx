@@ -6,10 +6,37 @@ import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 interface MusicCardProps {
   track: Track;
   onPlay: () => void;
+  initialLiked?: boolean;
+  onToggleLike?: (track: Track, isLiked: boolean) => void;
 }
 
-export default function MusicCard({ track, onPlay }: MusicCardProps) {
-  const [liked, setLiked] = useState(false);
+export default function MusicCard({
+  track,
+  onPlay,
+  initialLiked = false,
+  onToggleLike,
+}: MusicCardProps) {
+  const [liked, setLiked] = useState(initialLiked);
+  const [loadingLike, setLoadingLike] = useState(false);
+
+  const handleToggleLike = async () => {
+    const nextState = !liked;
+    setLiked(nextState);
+    if (onToggleLike) onToggleLike(track, nextState);
+
+    try {
+      setLoadingLike(true);
+      await fetch('http://localhost:5000/api/tracks/like', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ track }),
+      });
+    } catch (err) {
+      console.error('Lỗi lưu thích bài hát:', err);
+    } finally {
+      setLoadingLike(false);
+    }
+  };
 
   return (
     <View style={styles.card}>
@@ -29,9 +56,16 @@ export default function MusicCard({ track, onPlay }: MusicCardProps) {
             <Text style={styles.title} numberOfLines={1}>
               {track.title}
             </Text>
-            <Text style={styles.meta} numberOfLines={1}>
-              {track.artist} · {track.genre} · {track.duration}
-            </Text>
+            <View style={styles.metaRow}>
+              <Text style={styles.meta} numberOfLines={1}>
+                {track.artist} · {track.genre} · {track.duration}
+              </Text>
+              {track.bpm ? (
+                <View style={styles.bpmBadge}>
+                  <Text style={styles.bpmText}>🥁 {track.bpm} BPM</Text>
+                </View>
+              ) : null}
+            </View>
           </View>
 
           <View style={styles.actionRow}>
@@ -39,7 +73,8 @@ export default function MusicCard({ track, onPlay }: MusicCardProps) {
               <Icon name="play" size={12} color="#FFF" />
             </Pressable>
             <Pressable
-              onPress={() => setLiked(!liked)}
+              onPress={handleToggleLike}
+              disabled={loadingLike}
               style={styles.actionBtnTransparent}
             >
               <Icon
@@ -53,6 +88,13 @@ export default function MusicCard({ track, onPlay }: MusicCardProps) {
             </Pressable>
           </View>
         </View>
+
+        {/* Psychological effect */}
+        {track.psychologicalEffect ? (
+          <View style={styles.effectBadge}>
+            <Text style={styles.effectText}>🧠 {track.psychologicalEffect}</Text>
+          </View>
+        ) : null}
 
         {/* Reason */}
         {track.reason ? (
@@ -105,7 +147,41 @@ const styles = StyleSheet.create({
   meta: {
     fontSize: 12.5,
     color: COLORS.muted,
-    marginTop: 2,
+  },
+  metaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginTop: 3,
+    flexWrap: 'wrap',
+  },
+  bpmBadge: {
+    backgroundColor: 'rgba(34, 211, 238, 0.12)',
+    paddingHorizontal: 6,
+    paddingVertical: 1,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.25)',
+  },
+  bpmText: {
+    fontSize: 11,
+    color: '#22D3EE',
+    fontWeight: '700',
+  },
+  effectBadge: {
+    marginTop: 6,
+    backgroundColor: 'rgba(168, 85, 247, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: 'rgba(168, 85, 247, 0.25)',
+    alignSelf: 'flex-start',
+  },
+  effectText: {
+    fontSize: 11.5,
+    color: '#C084FC',
+    fontWeight: '500',
   },
   actionRow: {
     flexDirection: "row",
@@ -128,10 +204,15 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   reasonText: {
-    marginTop: 8,
-    fontSize: 12,
+    marginTop: 6,
+    fontSize: 11.5,
     color: COLORS.faint,
+<<<<<<< HEAD:components/moodflow/journey/MusicCard.tsx
     lineHeight: 17,
     fontStyle: "italic",
+=======
+    lineHeight: 16,
+    fontStyle: 'italic',
+>>>>>>> bd07347ee7ce77263b32c5ea829322bb9a8e0027:frontend/components/moodflow/journey/MusicCard.tsx
   },
 });
