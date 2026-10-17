@@ -18,6 +18,7 @@ export interface TrackMetadata {
 }
 
 export interface AudioEngine {
+  getProgress?: () => PlaybackProgress;
   load: () => Promise<void>;
   play: () => Promise<void>;
   pause: () => void;

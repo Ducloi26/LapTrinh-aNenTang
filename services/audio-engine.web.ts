@@ -19,14 +19,15 @@ export function createAudioEngine(
   let resolveLoad: (() => void) | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
   const clearTimer = () => { if (timer) clearTimeout(timer); };
+  const getProgress = () => ({
+    position: Number.isFinite(audio.currentTime) ? audio.currentTime : 0,
+    duration: Number.isFinite(audio.duration) ? audio.duration : 0,
+    isPlaying: !audio.paused && !audio.ended && audio.readyState >= 3,
+    isBuffering: audio.readyState < 3 && !audio.paused,
+  });
   const progress = () => {
     if (disposed) return;
-    callbacks.onProgress({
-      position: Number.isFinite(audio.currentTime) ? audio.currentTime : 0,
-      duration: Number.isFinite(audio.duration) ? audio.duration : 0,
-      isPlaying: !audio.paused && !audio.ended && audio.readyState >= 3,
-      isBuffering: audio.readyState < 3 && !audio.paused,
-    });
+    callbacks.onProgress(getProgress());
   };
   const loaded = () => { clearTimer(); resolveLoad?.(); progress(); };
   const failed = () => {
@@ -45,6 +46,7 @@ export function createAudioEngine(
   events.forEach(([name, callback]) => audio.addEventListener(name, callback));
 
   return {
+    getProgress,
     load() {
       if (disposed) return Promise.reject(cancelledLoad());
       if (!ready) {

@@ -1,0 +1,73 @@
+import { supabase } from '../lib/supabase';
+import type { ListeningRecord } from './listening-history-tracker';
+
+export function historyErrorMessage(error: { code?: string; message?: string }): string {
+  if (error.code === 'PGRST202') return 'Tính năng lịch sử nghe chưa được cấu hình trên máy chủ.';
+  if (error.code === '42501') return 'Tài khoản hiện tại chưa được phép lưu lịch sử nghe. Vui lòng kiểm tra đăng nhập.';
+  return 'Chưa lưu được lịch sử nghe. Bạn có thể bấm Thử lưu lại; nhạc vẫn tiếp tục phát.';
+}
+
+/** Pending writes stay in memory until success; retries reuse playbackId. */
+export class ListeningHistoryWriter {
+  private pending = new Map<string, ListeningRecord>();
+  private running: Promise<void> | null = null;
+  private flushRequested = false;
+  private listeners = new Set<(error: string | null) => void>();
+
+  onStatus(listener: (error: string | null) => void) {
+    this.listeners.add(listener);
+    return () => { this.listeners.delete(listener); };
+  }
+
+  enqueue(record: ListeningRecord) {
+    this.pending.set(record.playbackId, record);
+    void this.flush();
+  }
+
+  flush(): Promise<void> {
+    if (this.running) {
+      this.flushRequested = true;
+      return this.running;
+    }
+    this.running = this.drain().then(() => {
+      this.running = null;
+      if (this.flushRequested) {
+        this.flushRequested = false;
+        return this.flush();
+      }
+    });
+    return this.running;
+  }
+
+  private async drain() {
+    try {
+      const { data, error } = await supabase.auth.getSession();
+      if (error) throw error;
+      const userId = data.session?.user.id;
+      if (!userId) return;
+      for (const [id, record] of this.pending) {
+        // Never replay one account's history with another account's session.
+        if (record.userId !== userId) continue;
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 10000);
+        try {
+          const { error: writeError } = await supabase.rpc('record_listening_history', {
+            p_playback_id: record.playbackId, p_user_id: record.userId,
+            p_track_id: record.trackId, p_listened_sec: record.listenedSec,
+            p_duration_sec: record.durationSec, p_end_reason: record.endReason,
+            p_played_at: record.playedAt, p_journey_id: record.journeyId ?? null,
+            p_mood_id: record.moodId ?? null, p_stage: record.stage ?? null,
+          }).abortSignal(controller.signal);
+          if (writeError) throw writeError;
+          this.pending.delete(id);
+        } finally {
+          clearTimeout(timeout);
+        }
+      }
+      this.listeners.forEach((listener) => listener(null));
+    } catch (error) {
+      const message = historyErrorMessage(error && typeof error === 'object' ? error : {});
+      this.listeners.forEach((listener) => listener(message));
+    }
+  }
+}

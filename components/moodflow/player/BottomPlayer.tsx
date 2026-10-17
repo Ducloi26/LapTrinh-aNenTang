@@ -35,6 +35,12 @@ export default function BottomPlayer({
     volume,
     error,
     isBuffering,
+    historyError,
+    historyEnabled,
+    retryHistory,
+    startGuestSession,
+    guestSessionLoading,
+    guestSessionError,
     elapsedSeconds,
     durationSeconds,
     togglePlay,
@@ -251,6 +257,18 @@ export default function BottomPlayer({
           </View>
       </View>
 
+      {!historyEnabled && <View>
+        <Pressable disabled={guestSessionLoading} onPress={() => { void startGuestSession(); }} accessibilityRole="button">
+          <Text style={styles.stageText}>{guestSessionLoading ? 'Đang tạo phiên khách…' : 'Dùng chế độ khách để lưu lịch sử nghe'}</Text>
+        </Pressable>
+        {guestSessionError && <Text accessibilityRole="alert" style={styles.errorText}>{guestSessionError}</Text>}
+      </View>}
+      {historyEnabled && historyError && <View>
+        <Text accessibilityRole="alert" style={styles.errorText}>{historyError}</Text>
+        <Pressable onPress={() => { void retryHistory(); }}>
+          <Text style={styles.stageText}>Thử lưu lại</Text>
+        </Pressable>
+      </View>}
       {error ? (
         <Text accessibilityRole="alert" style={styles.errorText}>
           {error}

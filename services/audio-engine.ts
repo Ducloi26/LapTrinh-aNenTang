@@ -38,6 +38,15 @@ export function createAudioEngine(
   };
 
   return {
+    getProgress() {
+      const status = player?.currentStatus;
+      return {
+        position: Number.isFinite(status?.currentTime) ? status!.currentTime : 0,
+        duration: Number.isFinite(status?.duration) ? status!.duration : 0,
+        isPlaying: status?.playing ?? false,
+        isBuffering: status?.isBuffering ?? false,
+      };
+    },
     load() {
       if (disposed) return Promise.reject(cancelledLoad());
       if (ready) return ready;

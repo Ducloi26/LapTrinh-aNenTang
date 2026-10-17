@@ -53,7 +53,7 @@ CLAUDE.md
 *.plan.md
 package-lock.json
 package.json
-
+PLAYER_TESTING.md
 
 
 .env.example

@@ -3,6 +3,7 @@ import { SYNTH_PRESETS, SynthPresetId } from './audio-presets';
 import { configureAudioSession, createAudioEngine } from './audio-engine';
 import { AudioEngine, cancelledLoad, PlaybackProgress } from './audio-engine.types';
 import { resolveTrackSource } from './track-source';
+import type { ListeningContext, ListeningEndReason, ListeningHistoryTracker } from './listening-history-tracker';
 
 // Bundled stereo loops also work on native, where Web Audio oscillators are unavailable.
 const BINAURAL_SOURCES: Record<SynthPresetId, number> = {
@@ -24,6 +25,15 @@ export class PlayerService {
   private progressListeners = new Set<(progress: PlaybackProgress) => void>();
   private endListeners = new Set<() => void>();
   private errorListeners = new Set<(error: Error) => void>();
+  private selectedTrack: Track | null = null;
+  private listeningContext: ListeningContext = {};
+
+  constructor(private readonly history?: ListeningHistoryTracker) {}
+
+  setHistoryUser(userId: string | null) {
+    this.captureHistory();
+    this.history?.setUser(userId);
+  }
 
   onProgress(listener: (progress: PlaybackProgress) => void) {
     this.progressListeners.add(listener);
@@ -39,7 +49,11 @@ export class PlayerService {
   }
   get hasTrack() { return this.music !== null; }
 
-  async load(track: Track) {
+  async load(track: Track, listeningContext: ListeningContext = {}) {
+    this.finishHistory('changed');
+    this.selectedTrack = track;
+    this.listeningContext = listeningContext;
+    this.history?.begin(track.id, listeningContext);
     const generation = ++this.generation;
     this.releaseMusic();
     this.publish({ position: 0, duration: 0, isPlaying: false, isBuffering: true });
@@ -50,11 +64,13 @@ export class PlayerService {
       const music = createAudioEngine(source, {
         onProgress: (progress) => {
           if (generation !== this.generation) return;
+          this.history?.update(progress);
           this.publish(progress);
           this.syncBinaural(progress.isPlaying);
         },
         onEnd: () => {
           if (generation !== this.generation) return;
+          this.finishHistory('ended');
           this.syncBinaural(false);
           this.endListeners.forEach((listener) => listener());
         },
@@ -66,6 +82,7 @@ export class PlayerService {
       if (generation !== this.generation) throw cancelledLoad();
     } catch (error) {
       if (generation === this.generation) {
+        this.finishHistory('error');
         this.releaseMusic();
         this.publish({ ...this.progress, isPlaying: false, isBuffering: false });
       }
@@ -76,11 +93,13 @@ export class PlayerService {
   async play() {
     const music = this.music;
     if (!music) throw new Error('Chưa chọn bài hát để phát.');
+    if (!this.history?.active) this.history?.begin(this.selectedTrack?.id, this.listeningContext);
     await music.play();
     if (music !== this.music) throw cancelledLoad();
   }
 
   pause() {
+    this.captureHistory();
     this.music?.pause();
     this.syncBinaural(false);
     this.publish({ ...this.progress, isPlaying: false, isBuffering: false });
@@ -88,6 +107,8 @@ export class PlayerService {
 
   async seek(seconds: number) {
     if (!Number.isFinite(seconds) || !this.music || this.progress.duration <= 0) return;
+    this.captureHistory();
+    this.history?.seeking();
     await this.music.seek(Math.max(0, Math.min(this.progress.duration, seconds)));
   }
 
@@ -108,11 +129,13 @@ export class PlayerService {
   }
 
   stop() {
+    this.finishHistory('stopped');
     ++this.generation;
     this.releaseMusic();
     ++this.mixGeneration;
     this.binaural?.dispose();
     this.binaural = null;
+    this.selectedTrack = null;
     this.publish({ position: 0, duration: 0, isPlaying: false, isBuffering: false });
   }
 
@@ -135,6 +158,7 @@ export class PlayerService {
   }
 
   private fail(error: Error) {
+    this.finishHistory('error');
     ++this.generation;
     this.releaseMusic();
     this.publish({ ...this.progress, isPlaying: false, isBuffering: false });
@@ -149,6 +173,16 @@ export class PlayerService {
       console.warn('Không phát được lớp Binaural', error);
     });
     else this.binaural?.pause();
+  }
+
+  private captureHistory() {
+    const progress = this.music?.getProgress?.();
+    if (progress) this.history?.update(progress);
+  }
+
+  private finishHistory(reason: ListeningEndReason) {
+    this.captureHistory();
+    this.history?.finish(reason);
   }
 
   private async startBinaural() {

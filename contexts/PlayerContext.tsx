@@ -3,6 +3,11 @@ import { Track } from '@/constants/moodflow';
 import { PlayerService } from '@/services/player-service';
 import { SynthPresetId } from '@/services/audio-presets';
 import { PlaybackProgress } from '@/services/audio-engine.types';
+import { ListeningContext, ListeningHistoryTracker } from '@/services/listening-history-tracker';
+import { ListeningHistoryWriter } from '@/services/listening-history-service';
+import { supabase } from '@/lib/supabase';
+import { AppState } from 'react-native';
+import { ensureGuestSession, guestSessionErrorMessage } from '@/services/guest-session';
 
 export interface PlayerStageInfo {
   index: number;
@@ -13,6 +18,7 @@ export interface PlayerStageInfo {
 export interface PlayerQueueEntry {
   track: Track;
   stageInfo: PlayerStageInfo | null;
+  historyContext?: ListeningContext;
 }
 
 interface PlayerContextValue {
@@ -42,12 +48,23 @@ interface PlayerContextValue {
   previousTrack: () => void;
   nextTrack: () => void;
   initializeLibrary: (tracks: Track[]) => void;
+  historyError: string | null;
+  historyEnabled: boolean;
+  retryHistory: () => Promise<void>;
+  startGuestSession: () => Promise<void>;
+  guestSessionLoading: boolean;
+  guestSessionError: string | null;
 }
 
 const PlayerContext = createContext<PlayerContextValue | null>(null);
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
-  const [service] = useState(() => new PlayerService());
+  const [writer] = useState(() => new ListeningHistoryWriter());
+  const [service] = useState(() => new PlayerService(new ListeningHistoryTracker((record) => writer.enqueue(record))));
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyEnabled, setHistoryEnabled] = useState(false);
+  const [guestSessionLoading, setGuestSessionLoading] = useState(false);
+  const [guestSessionError, setGuestSessionError] = useState<string | null>(null);
   const [queue, setQueue] = useState<PlayerQueueEntry[]>([]);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [status, setStatus] = useState<PlaybackProgress>({ position: 0, duration: 0, isPlaying: false, isBuffering: false });
@@ -77,7 +94,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     wantsPlay.current = autoPlay;
     setCurrentIndex(index);
     setError(null);
-    const loading = service.load(entry.track);
+    const loading = service.load(entry.track, entry.historyContext);
     pendingLoad.current = loading;
     try {
       await loading;
@@ -95,6 +112,17 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     mounted.current = true;
+    const offHistory = writer.onStatus(setHistoryError);
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
+      service.setHistoryUser(session?.user.id ?? null);
+      setHistoryEnabled(Boolean(session?.user.id));
+      if (session) setGuestSessionError(null);
+      // Avoid awaiting another auth operation inside Supabase's auth callback.
+      setTimeout(() => { void writer.flush(); }, 0);
+    });
+    const appStateListener = AppState.addEventListener('change', (next) => {
+      if (next === 'active') void writer.flush();
+    });
     const offProgress = service.onProgress((progress) => {
       if (wasPlaying.current && !progress.isPlaying && !progress.isBuffering) wantsPlay.current = false;
       wasPlaying.current = progress.isPlaying;
@@ -117,9 +145,12 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
       wantsPlay.current = false;
       pendingLoad.current = null;
       offProgress(); offError(); offEnd();
+      offHistory();
+      authListener.subscription.unsubscribe();
+      appStateListener.remove();
       service.dispose();
     };
-  }, [loadEntry, reportError, service]);
+  }, [loadEntry, reportError, service, writer]);
 
   const play = useCallback(async () => {
     wantsPlay.current = true;
@@ -160,7 +191,26 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     pendingLoad.current = null;
     service.stop();
     setError(null);
-  }, [service]);
+    await writer.flush();
+  }, [service, writer]);
+
+  const retryHistory = useCallback(() => writer.flush(), [writer]);
+
+  const startGuestSession = useCallback(async () => {
+    setGuestSessionLoading(true);
+    setGuestSessionError(null);
+    try {
+      const session = await ensureGuestSession();
+      if (!mounted.current) return;
+      service.setHistoryUser(session.user.id);
+      setHistoryEnabled(true);
+      await writer.flush();
+    } catch (reason) {
+      if (mounted.current) setGuestSessionError(guestSessionErrorMessage(reason));
+    } finally {
+      if (mounted.current) setGuestSessionLoading(false);
+    }
+  }, [service, writer]);
 
   const setPreset = useCallback(async (preset: SynthPresetId) => {
     setPresetId(preset);
@@ -216,8 +266,10 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     elapsedSeconds: status.position,
     durationSeconds: status.duration,
     presetId, volume, error, play, pause, togglePlay, stop,
+    historyError, historyEnabled, retryHistory,
+    startGuestSession, guestSessionLoading, guestSessionError,
     setPreset, setVolume, seekTo, playTrack, previousTrack, nextTrack, initializeLibrary,
-  }), [queue, currentIndex, status, presetId, volume, error, play, pause, togglePlay, stop, setPreset, setVolume, seekTo, playTrack, previousTrack, nextTrack, initializeLibrary]);
+  }), [queue, currentIndex, status, presetId, volume, error, play, pause, togglePlay, stop, setPreset, setVolume, seekTo, playTrack, previousTrack, nextTrack, initializeLibrary, historyError, historyEnabled, retryHistory, startGuestSession, guestSessionLoading, guestSessionError]);
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
 }

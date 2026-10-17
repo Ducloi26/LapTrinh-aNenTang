@@ -5,6 +5,7 @@ import { generateJourney, Journey, Stage } from "@/services/journey-generator";
 import { PlayerQueueEntry, usePlayer } from "@/contexts/PlayerContext";
 import { trackKey } from "@/services/track-source";
 import { loadMusicCatalog } from "@/services/track-catalog";
+import { supabase } from "@/lib/supabase";
 import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Pressable,
@@ -147,6 +148,11 @@ export default function MoodFlowMain() {
                   total: j.stages.length,
                   title: stage.title,
                 },
+                historyContext: {
+                  journeyId: j.id ?? null,
+                  moodId: index === 0 ? activeState.moodFrom : activeState.moodTo,
+                  stage: stage.key,
+                },
               })),
             );
             selectTrack(first, queue[0]?.stageInfo, queue, 0);
@@ -170,6 +176,11 @@ export default function MoodFlowMain() {
               index,
               total: journey.stages.length,
               title: journeyStage.title,
+            },
+            historyContext: {
+              journeyId: journey.id ?? null,
+              moodId: index === 0 ? journey.moodFromId : journey.moodToId,
+              stage: journeyStage.key,
             },
           })),
         )
@@ -201,6 +212,17 @@ export default function MoodFlowMain() {
     setState(next);
     triggerGenerateJourney(next);
   };
+
+  const handleLogout = useCallback(() => {
+    void stopPlayback().then(async () => {
+      const { error } = await supabase.auth.signOut();
+      if (error) console.error('Failed to sign out', error);
+      setAuthed(false);
+    }).catch((error: unknown) => {
+      console.error('Failed to stop audio before logout', error);
+      setAuthed(false);
+    });
+  }, [stopPlayback]);
 
   // Switch page content
   const pageContent = useMemo(() => {
@@ -235,14 +257,7 @@ export default function MoodFlowMain() {
       case "settings":
         return (
           <SettingsPage
-            onLogout={() => {
-              void stopPlayback().then(() => {
-                setAuthed(false);
-              }).catch((error: unknown) => {
-                console.error("Failed to stop audio before logout", error);
-                setAuthed(false);
-              });
-            }}
+            onLogout={handleLogout}
             userName={userName}
           />
         );
@@ -254,15 +269,11 @@ export default function MoodFlowMain() {
     state,
     journey,
     userName,
-    stopPlayback,
+    handleLogout,
     handlePlayTrack,
     triggerGenerateJourney,
     libraryTracks,
   ]);
-
-  const handleLogout = () => {
-    void stopPlayback().finally(() => setAuthed(false));
-  };
 
   // If user is not logged in, render AuthScreen
   if (!authed) {

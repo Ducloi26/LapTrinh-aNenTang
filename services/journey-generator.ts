@@ -18,6 +18,9 @@ export interface Stage {
 }
 
 export interface Journey {
+  id?: string;
+  moodFromId?: string;
+  moodToId?: string;
   stages: Stage[];
   totalMin: number;
 }
@@ -85,5 +88,5 @@ export function generateJourney(params: {
     };
   });
 
-  return { stages, totalMin: t };
+  return { stages, totalMin: t, moodFromId: moodFrom.id, moodToId: moodTo.id };
 }
