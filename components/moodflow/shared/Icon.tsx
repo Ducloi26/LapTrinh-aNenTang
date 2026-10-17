@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Platform } from 'react-native';
-import { Ionicons, Feather, MaterialCommunityIcons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 
 interface IconProps {
   name: string;
@@ -88,9 +88,16 @@ export default function Icon({
   }
 
   // Fallback native
+  const nativeAliases: Record<string, React.ComponentProps<typeof Feather>['name']> = {
+    skipback: 'skip-back',
+    skipforward: 'skip-forward',
+    close: 'x',
+    volume: 'volume-2',
+    sparkles: 'star',
+  };
   return (
     <View style={style}>
-      <Feather name={name as any} size={size} color={color} />
+      <Feather name={nativeAliases[name] ?? name as any} size={size} color={color} />
     </View>
   );
 }

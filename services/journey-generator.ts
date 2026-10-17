@@ -52,8 +52,9 @@ export function generateJourney(params: {
   moodTo: Mood;
   activity: string;
   duration: number;
+  trackPool?: Record<string, Track[]>;
 }): Journey {
-  const { moodFrom, moodTo, activity, duration } = params;
+  const { moodFrom, moodTo, activity, duration, trackPool = TRACK_POOL } = params;
   const template = pickTemplate(moodTo.id);
   let t = 0;
 
@@ -61,7 +62,7 @@ export function generateJourney(params: {
     const stageMin = Math.max(4, Math.round(duration * tpl.share));
     const start = t;
     t += stageMin;
-    const pool = TRACK_POOL[tpl.pool] || TRACK_POOL.calmdown;
+    const pool = trackPool[tpl.pool]?.length ? trackPool[tpl.pool] : trackPool.calmdown || [];
     const trackCount = Math.max(1, Math.round(stageMin / 20));
 
     const tracks: Track[] = Array.from({ length: Math.min(trackCount, pool.length) }, (_, idx) => {

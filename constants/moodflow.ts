@@ -82,10 +82,15 @@ export const NAV_ITEMS: NavItem[] = [
 ];
 
 export interface Track {
+  id?: string;
+  audioUrl?: string;
+  storagePath?: string;
+  storageBucket?: string;
   title: string;
   artist: string;
   genre: string;
   energy: number;
+  bpm?: number;
   duration: string;
   cover: string;
   mood?: string;
@@ -94,33 +99,33 @@ export interface Track {
 
 export const TRACK_POOL: Record<string, Track[]> = {
   calmdown: [
-    { title: 'Slow Tide', artist: 'Nima Sky', genre: 'Ambient', energy: 22, duration: '3:41', cover: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=200&auto=format&fit=crop&q=80' },
-    { title: 'Paper Rain', artist: 'Wren Hale', genre: 'Lo-fi', energy: 28, duration: '2:58', cover: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=200&auto=format&fit=crop&q=80' },
-    { title: 'Quiet Room', artist: 'Odalys', genre: 'Soft', energy: 18, duration: '4:02', cover: 'https://images.unsplash.com/photo-1447752875215-b2761acb3c5d?w=200&auto=format&fit=crop&q=80' },
+    { title: 'Slow Tide', artist: 'Nima Sky', genre: 'Ambient', energy: 22, bpm: 72, duration: '3:41', cover: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=200&auto=format&fit=crop&q=80' },
+    { title: 'Paper Rain', artist: 'Wren Hale', genre: 'Lo-fi', energy: 28, bpm: 78, duration: '2:58', cover: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=200&auto=format&fit=crop&q=80' },
+    { title: 'Quiet Room', artist: 'Odalys', genre: 'Soft', energy: 18, bpm: 64, duration: '4:02', cover: 'https://images.unsplash.com/photo-1447752875215-b2761acb3c5d?w=200&auto=format&fit=crop&q=80' },
   ],
   focus: [
-    { title: 'Glasswork', artist: 'Halden', genre: 'Lo-fi', energy: 45, duration: '3:15', cover: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=200&auto=format&fit=crop&q=80' },
-    { title: 'Low Light Desk', artist: 'Maren Cole', genre: 'Instrumental', energy: 40, duration: '3:52', cover: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200&auto=format&fit=crop&q=80' },
-    { title: 'Static Bloom', artist: 'Iyo', genre: 'Indie', energy: 48, duration: '3:20', cover: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=200&auto=format&fit=crop&q=80' },
+    { title: 'Glasswork', artist: 'Halden', genre: 'Lo-fi', energy: 45, bpm: 82, duration: '3:15', cover: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=200&auto=format&fit=crop&q=80' },
+    { title: 'Low Light Desk', artist: 'Maren Cole', genre: 'Instrumental', energy: 40, bpm: 76, duration: '3:52', cover: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=200&auto=format&fit=crop&q=80' },
+    { title: 'Static Bloom', artist: 'Iyo', genre: 'Indie', energy: 48, bpm: 90, duration: '3:20', cover: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=200&auto=format&fit=crop&q=80' },
   ],
   deepfocus: [
-    { title: 'Signal / Noise', artist: 'Verse Atlas', genre: 'Minimal', energy: 52, duration: '5:10', cover: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=200&auto=format&fit=crop&q=80' },
-    { title: 'Concrete Drift', artist: 'Halden', genre: 'Ambient', energy: 50, duration: '4:44', cover: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=200&auto=format&fit=crop&q=80' },
-    { title: 'Interior', artist: 'Maren Cole', genre: 'Instrumental', energy: 55, duration: '4:08', cover: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80' },
+    { title: 'Signal / Noise', artist: 'Verse Atlas', genre: 'Minimal', energy: 52, bpm: 88, duration: '5:10', cover: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=200&auto=format&fit=crop&q=80' },
+    { title: 'Concrete Drift', artist: 'Halden', genre: 'Ambient', energy: 50, bpm: 70, duration: '4:44', cover: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=200&auto=format&fit=crop&q=80' },
+    { title: 'Interior', artist: 'Maren Cole', genre: 'Instrumental', energy: 55, bpm: 80, duration: '4:08', cover: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80' },
   ],
   cooldown: [
-    { title: 'Evening Keys', artist: 'Odalys', genre: 'Piano', energy: 15, duration: '3:30', cover: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=200&auto=format&fit=crop&q=80' },
-    { title: 'Afterglow', artist: 'Nima Sky', genre: 'Chill', energy: 20, duration: '3:05', cover: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=200&auto=format&fit=crop&q=80' },
-    { title: 'Soft Landing', artist: 'Wren Hale', genre: 'Soft', energy: 17, duration: '2:49', cover: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=200&auto=format&fit=crop&q=80' },
+    { title: 'Evening Keys', artist: 'Odalys', genre: 'Piano', energy: 15, bpm: 68, duration: '3:30', cover: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=200&auto=format&fit=crop&q=80' },
+    { title: 'Afterglow', artist: 'Nima Sky', genre: 'Chill', energy: 20, bpm: 74, duration: '3:05', cover: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=200&auto=format&fit=crop&q=80' },
+    { title: 'Soft Landing', artist: 'Wren Hale', genre: 'Soft', energy: 17, bpm: 62, duration: '2:49', cover: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=200&auto=format&fit=crop&q=80' },
   ],
   energize: [
-    { title: 'Ignition', artist: 'Ruta Voss', genre: 'Pop', energy: 78, duration: '3:02', cover: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=200&auto=format&fit=crop&q=80' },
-    { title: 'Red Line', artist: 'Kavi Okon', genre: 'R&B', energy: 72, duration: '2:54', cover: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=200&auto=format&fit=crop&q=80' },
-    { title: 'Momentum', artist: 'Ruta Voss', genre: 'Indie', energy: 80, duration: '3:18', cover: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=200&auto=format&fit=crop&q=80' },
+    { title: 'Ignition', artist: 'Ruta Voss', genre: 'Pop', energy: 78, bpm: 120, duration: '3:02', cover: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=200&auto=format&fit=crop&q=80' },
+    { title: 'Red Line', artist: 'Kavi Okon', genre: 'R&B', energy: 72, bpm: 96, duration: '2:54', cover: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=200&auto=format&fit=crop&q=80' },
+    { title: 'Momentum', artist: 'Ruta Voss', genre: 'Indie', energy: 80, bpm: 128, duration: '3:18', cover: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=200&auto=format&fit=crop&q=80' },
   ],
   romantic: [
-    { title: 'Slow Dial', artist: 'Odalys', genre: 'R&B', energy: 35, duration: '3:44', cover: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=200&auto=format&fit=crop&q=80' },
-    { title: 'Warm Static', artist: 'Kavi Okon', genre: 'Soul', energy: 32, duration: '3:29', cover: 'https://images.unsplash.com/photo-1447752875215-b2761acb3c5d?w=200&auto=format&fit=crop&q=80' },
+    { title: 'Slow Dial', artist: 'Odalys', genre: 'R&B', energy: 35, bpm: 84, duration: '3:44', cover: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=200&auto=format&fit=crop&q=80' },
+    { title: 'Warm Static', artist: 'Kavi Okon', genre: 'Soul', energy: 32, bpm: 78, duration: '3:29', cover: 'https://images.unsplash.com/photo-1447752875215-b2761acb3c5d?w=200&auto=format&fit=crop&q=80' },
   ],
 };
 

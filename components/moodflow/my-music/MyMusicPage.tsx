@@ -21,16 +21,17 @@ const STATS = [
 
 interface MyMusicPageProps {
   onPlayTrack?: (t: Track) => void;
+  tracks?: Track[];
 }
-export default function MyMusicPage({ onPlayTrack }: MyMusicPageProps) {
+export default function MyMusicPage({ onPlayTrack, tracks }: MyMusicPageProps) {
   const [tab, setTab] = useState("liked");
 
-  const sampleTracks: Track[] = [
+  const sampleTracks: Track[] = (tracks ?? [
     TRACK_POOL.focus[0],
     TRACK_POOL.calmdown[1],
     TRACK_POOL.deepfocus[2],
     TRACK_POOL.cooldown[0],
-  ].map((t) => ({
+  ]).map((t) => ({
     ...t,
     mood: "Tập trung",
     reason: "Nằm trong Music DNA của bạn.",

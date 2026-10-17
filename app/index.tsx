@@ -1,14 +1,12 @@
 import { COLORS, moodById, Track, TRACK_POOL } from "@/constants/moodflow";
 import { AIParsedResult } from "@/services/ai-prompt-parser";
-import { audioSynth } from "@/services/audio-service";
-import {
-  presetForMoodActivity,
-  SynthPresetId,
-} from "@/services/audio-presets";
+import { presetForMoodActivity } from "@/services/audio-presets";
 import { generateJourney, Journey, Stage } from "@/services/journey-generator";
-import React, { useEffect, useMemo, useState } from "react";
+import { PlayerQueueEntry, usePlayer } from "@/contexts/PlayerContext";
+import { trackKey } from "@/services/track-source";
+import { loadMusicCatalog } from "@/services/track-catalog";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  Platform,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -43,8 +41,25 @@ import NowPlayingModal from "@/components/moodflow/player/NowPlayingModal";
 import AuthScreen from "@/app/auth";
 
 export default function MoodFlowMain() {
+  const {
+    playTrack: selectTrack,
+    togglePlay,
+    stop: stopPlayback,
+    setPreset,
+    playing,
+    nowPlaying,
+    stageInfo,
+    elapsedSeconds,
+    durationSeconds,
+    seekTo,
+    initializeLibrary,
+  } = usePlayer();
   const [authed, setAuthed] = useState(true);
   const [userName, setUserName] = useState("Lợi");
+  const [trackPool, setTrackPool] = useState(TRACK_POOL);
+  const [libraryTracks, setLibraryTracks] = useState<Track[]>([]);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(true);
 
   // App Navigation & Responsive
   const [page, setPage] = useState("home");
@@ -74,91 +89,35 @@ export default function MoodFlowMain() {
       duration: 120,
     }),
   );
+  const initialJourney = useRef(journey);
 
-  // Music Playback state
-  const [nowPlaying, setNowPlaying] = useState<Track | null>(
-    () => TRACK_POOL.focus[0],
-  );
-  const [stageInfo, setStageInfo] = useState({
-    index: 0,
-    total: 4,
-    title: "Focus",
-  });
-  const [playing, setPlaying] = useState(false);
-  const [presetId, setPresetId] = useState<SynthPresetId>("deep-work");
-  const [volume, setVolume] = useState(0.55);
-  const [audioError, setAudioError] = useState<string | null>(null);
+  useEffect(() => {
+    let active = true;
+    void loadMusicCatalog().then((catalog) => {
+      if (!active) return;
+      setTrackPool(catalog.pools);
+      setLibraryTracks(catalog.tracks);
+      initializeLibrary(catalog.tracks);
+      setJourney((current) => current === initialJourney.current ? generateJourney({
+        moodFrom: moodById("anxious"), moodTo: moodById("focus"),
+        activity: "coding", duration: 120, trackPool: catalog.pools,
+      }) : current);
+    }).catch((reason: unknown) => {
+      if (active) setCatalogError(reason instanceof Error ? reason.message : "Không tải được thư viện nhạc.");
+    }).finally(() => { if (active) setCatalogLoading(false); });
+    return () => { active = false; };
+  }, [initializeLibrary]);
 
   const currentMood = moodById(state.moodFrom);
 
-  const reportAudioError = (error: unknown) => {
-    setAudioError(
-      error instanceof Error ? error.message : "Không thể khởi tạo bộ phát âm thanh.",
-    );
-    setPlaying(false);
-  };
-
-  const startSynth = async (nextPreset = presetId) => {
-    try {
-      await audioSynth.play(nextPreset);
-      setAudioError(null);
-      setPlaying(true);
-    } catch (error) {
-      reportAudioError(error);
-    }
-  };
-
-  const stopSynth = async () => {
-    try {
-      await audioSynth.stop();
-      setAudioError(null);
-    } catch (error) {
-      reportAudioError(error);
-    } finally {
-      setPlaying(false);
-    }
-  };
-
-  const changePreset = async (nextPreset: SynthPresetId) => {
-    setPresetId(nextPreset);
-    try {
-      await audioSynth.setPreset(nextPreset);
-      setAudioError(null);
-    } catch (error) {
-      reportAudioError(error);
-    }
-  };
-
   useEffect(() => {
     const nextPreset = presetForMoodActivity(state.moodTo, state.activity);
-    setPresetId(nextPreset);
-    void audioSynth.setPreset(nextPreset).then(() => {
-      setAudioError(null);
-    }).catch((error: unknown) => {
-      setAudioError(
-        error instanceof Error
-          ? error.message
-          : "Không thể đổi preset âm thanh.",
-      );
-      setPlaying(false);
-    });
-  }, [state.moodTo, state.activity]);
-
-  useEffect(() => {
-    return () => {
-      void audioSynth.stop().catch((error: unknown) => {
-        console.error("Failed to release Web Audio resources", error);
-      });
-    };
-  }, []);
-
-  const changeVolume = (nextVolume: number) => {
-    setVolume(nextVolume);
-    audioSynth.setVolume(nextVolume);
-  };
+    void setPreset(nextPreset);
+  }, [state.moodTo, state.activity, setPreset]);
 
   // Trigger Journey Generation with 5-step animation
-  const triggerGenerateJourney = (customState?: typeof state) => {
+  const triggerGenerateJourney = useCallback((customState?: typeof state) => {
+    if (catalogLoading || catalogError) return;
     const activeState = customState || state;
     setIsGenerating(true);
     setGenerationStep(0);
@@ -173,50 +132,63 @@ export default function MoodFlowMain() {
             moodTo: moodById(activeState.moodTo),
             activity: activeState.activity,
             duration: activeState.duration,
+            trackPool,
           });
           setJourney(j);
           setIsGenerating(false);
           setPage("journey");
           const first = j.stages[0]?.tracks[0];
           if (first) {
-            setNowPlaying(first);
-            setStageInfo({
-              index: 0,
-              total: j.stages.length,
-              title: j.stages[0].title,
-            });
-            void startSynth();
+            const queue: PlayerQueueEntry[] = j.stages.flatMap((stage, index) =>
+              stage.tracks.map((track) => ({
+                track,
+                stageInfo: {
+                  index,
+                  total: j.stages.length,
+                  title: stage.title,
+                },
+              })),
+            );
+            selectTrack(first, queue[0]?.stageInfo, queue, 0);
           }
         }, 500);
         return prev;
       });
     }, 600);
-  };
+  }, [selectTrack, state, trackPool, catalogLoading, catalogError]);
 
-  const handlePlayTrack = (
+  const handlePlayTrack = useCallback((
     track: Track,
     stage?: Stage,
     stageIndex?: number,
   ) => {
-    setNowPlaying(track);
-    if (stage && stageIndex !== undefined && journey) {
-      setStageInfo({
-        index: stageIndex,
-        total: journey.stages.length,
-        title: stage.title,
-      });
-    }
-    void startSynth();
-  };
+    const queue: PlayerQueueEntry[] = stage && stageIndex !== undefined && journey
+      ? journey.stages.flatMap((journeyStage, index) =>
+          journeyStage.tracks.map((journeyTrack) => ({
+            track: journeyTrack,
+            stageInfo: {
+              index,
+              total: journey.stages.length,
+              title: journeyStage.title,
+            },
+          })),
+        )
+      : libraryTracks.map((libraryTrack) => ({
+          track: libraryTrack,
+          stageInfo: { index: 0, total: 1, title: "Thư viện" },
+        }));
+    const trackIndex = Math.max(0, queue.findIndex((entry) =>
+      trackKey(entry.track) === trackKey(track) &&
+      (stageIndex === undefined || entry.stageInfo?.index === stageIndex),
+    ));
+    const selectedStage = stage && stageIndex !== undefined && journey
+      ? { index: stageIndex, total: journey.stages.length, title: stage.title }
+      : queue[trackIndex]?.stageInfo;
+    selectTrack(track, selectedStage, queue, trackIndex);
+  }, [journey, selectTrack, libraryTracks]);
 
   const handleTogglePlay = () => {
-    if (playing) {
-      void audioSynth.pause().then(() => {
-        setPlaying(false);
-      }).catch(reportAudioError);
-    } else {
-      void startSynth();
-    }
+    togglePlay();
   };
 
   const applyFromAI = (parsed: AIParsedResult) => {
@@ -255,7 +227,7 @@ export default function MoodFlowMain() {
       case "discover":
         return <DiscoverPage />;
       case "mymusic":
-        return <MyMusicPage onPlayTrack={handlePlayTrack} />;
+        return <MyMusicPage tracks={libraryTracks} onPlayTrack={handlePlayTrack} />;
       case "community":
         return <CommunityPage />;
       case "stats":
@@ -264,17 +236,10 @@ export default function MoodFlowMain() {
         return (
           <SettingsPage
             onLogout={() => {
-              void audioSynth.stop().then(() => {
-                setAudioError(null);
-                setPlaying(false);
+              void stopPlayback().then(() => {
                 setAuthed(false);
               }).catch((error: unknown) => {
-                setAudioError(
-                  error instanceof Error
-                    ? error.message
-                    : "Không thể dừng bộ phát âm thanh.",
-                );
-                setPlaying(false);
+                console.error("Failed to stop audio before logout", error);
                 setAuthed(false);
               });
             }}
@@ -284,10 +249,19 @@ export default function MoodFlowMain() {
       default:
         return null;
     }
-  }, [page, state, journey, userName, playing]);
+  }, [
+    page,
+    state,
+    journey,
+    userName,
+    stopPlayback,
+    handlePlayTrack,
+    triggerGenerateJourney,
+    libraryTracks,
+  ]);
 
   const handleLogout = () => {
-    void stopSynth().finally(() => setAuthed(false));
+    void stopPlayback().finally(() => setAuthed(false));
   };
 
   // If user is not logged in, render AuthScreen
@@ -325,7 +299,7 @@ export default function MoodFlowMain() {
           style={styles.mainScroll}
           contentContainerStyle={[
             styles.mainScrollContent,
-            { paddingBottom: isDesktop ? 120 : 160 },
+            { paddingBottom: isDesktop ? 160 : 220 },
           ]}
           showsVerticalScrollIndicator={false}
         >
@@ -343,6 +317,21 @@ export default function MoodFlowMain() {
             </Pressable>
           </View>
 
+          {catalogLoading && <Text style={{ color: COLORS.muted, marginBottom: 12 }}>Đang tải thư viện nhạc…</Text>}
+          {!catalogLoading && <View style={{ marginBottom: 12, gap: 8 }}>
+            {catalogError && <Text accessibilityRole="alert" style={{ color: COLORS.danger }}>{catalogError}</Text>}
+            <Pressable onPress={() => {
+              setCatalogLoading(true);
+              setCatalogError(null);
+              void loadMusicCatalog().then((catalog) => {
+                setTrackPool(catalog.pools);
+                setLibraryTracks(catalog.tracks);
+                initializeLibrary(catalog.tracks);
+                setJourney(null);
+              }).catch((reason: unknown) => setCatalogError(reason instanceof Error ? reason.message : "Không tải được thư viện nhạc."))
+                .finally(() => setCatalogLoading(false));
+            }}><Text style={{ color: COLORS.ok }}>Tải lại thư viện</Text></Pressable>
+          </View>}
           {pageContent}
         </ScrollView>
       </View>
@@ -363,21 +352,10 @@ export default function MoodFlowMain() {
       )}
 
       {/* Persistent Bottom Music Player */}
-      {Platform.OS === "web" && (
         <BottomPlayer
-          nowPlaying={nowPlaying}
-          playing={playing}
-          presetId={presetId}
-          volume={volume}
           bottomOffset={isDesktop ? 0 : 60}
-          error={audioError}
-          onTogglePlay={handleTogglePlay}
-          onStop={() => void stopSynth()}
-          onVolumeChange={changeVolume}
-          onPresetChange={(nextPreset) => void changePreset(nextPreset)}
           onOpenNowPlaying={() => setNowPlayingModal(true)}
         />
-      )}
 
       {/* Full-Screen Now Playing Experience Modal */}
       {nowPlayingModal && (
@@ -385,8 +363,11 @@ export default function MoodFlowMain() {
           track={nowPlaying}
           isPlaying={playing}
           onTogglePlay={handleTogglePlay}
+          elapsedSeconds={elapsedSeconds}
+          durationSeconds={durationSeconds}
+          onSeek={seekTo}
           currentMood={currentMood}
-          stageInfo={stageInfo}
+          stageInfo={stageInfo ?? undefined}
           onClose={() => setNowPlayingModal(false)}
         />
       )}
