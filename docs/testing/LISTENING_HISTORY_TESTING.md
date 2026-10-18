@@ -2,7 +2,9 @@
 
 ## Áp dụng phần backend lên Supabase
 
-Bảng `listening_history` đã tồn tại. Migration chỉ bổ sung những cột/chỉ mục còn thiếu và hàm RPC, không tạo một bảng mới mang tên `record_listening_history`.
+Bảng `listening_history` đã tồn tại với `id`, `user_id`, `track_id`, `journey_id` (hoặc `jouney_id`), `listened_sec`, `completed`, `skipped`, `played_at`, `playback_id`. Phần 6.5 dùng đúng bảng này: **không tạo bảng mới, không thêm hoặc đổi tên cột**.
+
+`record_listening_history` là **hàm xử lý ở database**, không phải bảng. File SQL tạo/cập nhật hàm này và tạo một unique index trên `(user_id, playback_id)` để tránh lưu trùng khi thử lại. Dữ liệu vẫn nằm trong `listening_history`.
 
 Mở **Supabase Dashboard → dự án → SQL Editor → New query**, dán toàn bộ nội dung file:
 
@@ -10,13 +12,13 @@ Mở **Supabase Dashboard → dự án → SQL Editor → New query**, dán toà
 supabase/migrations/202610170001_record_listening_history.sql
 ```
 
-Sau đó bấm **Run** một lần. File chỉ bổ sung ba cột, một chỉ mục chống trùng và hàm `record_listening_history`; không tạo lại bảng hoặc xóa lịch sử hiện có. Có thể chạy lại file mà không tạo trùng cột/chỉ mục.
+Sau đó bấm **Run** một lần với **nội dung file đã cập nhật lần này**, kể cả khi đã chạy bản SQL cũ. File không có lệnh tạo bảng hoặc thêm cột, không xóa lịch sử và có thể chạy lại. Nếu thiếu `mood_id`/`stage`, hàm vẫn hoạt động; nếu hai cột đó có sẵn thì hàm giữ việc ghi metadata. `playback_id` hiện có dùng kiểu `text` cho mã lượt nghe do ứng dụng tạo.
 
 Hàm chạy ở backend Supabase, nhận diện tài khoản qua `auth.uid()`, kiểm tra chủ sở hữu journey nếu có, tự tính completed/skipped, rồi ghi lịch sử và cộng play_count trong một giao dịch. Khi một bước lỗi, cả hai bước hoàn tác. Mã playback_id ổn định giúp gửi lại yêu cầu mà không ghi/tăng trùng.
 
 Không cần chạy thêm Express server cho hạng mục này. Ứng dụng gọi hàm qua Supabase RPC với phiên đăng nhập hiện tại. Tham khảo [Supabase Database Functions](https://supabase.com/docs/guides/database/functions).
 
-Nếu đã chạy đầy đủ migration trước đây thì không cần chạy lại chỉ vì sắp xếp thư mục. Lần sắp xếp này giữ nguyên nội dung SQL và không thực thi trên database thật. Không đưa service-role key vào ứng dụng.
+Lần chỉnh này mới cập nhật file trong code, chưa thực thi SQL trên database thật. Cần chạy file SQL trên Dashboard để cập nhật hàm trước khi test ứng dụng. Không đưa service-role key vào ứng dụng.
 
 ## Quy tắc ghi
 
@@ -29,7 +31,7 @@ Nếu đã chạy đầy đủ migration trước đây thì không cần chạy
 - Hai cờ độc lập: một bài rất ngắn có thể vừa đạt 80% vừa bị chủ động chuyển trước 30 giây.
 - Mỗi lượt được ghi tăng `tracks.play_count` thêm 1, kể cả lượt skipped đủ 5 giây.
 - Ghi cho tài khoản Supabase thường hoặc phiên khách ẩn danh. Chế độ xem demo chưa có phiên khách thì chưa ghi lịch sử.
-- Gắn mood/stage từ hành trình đang phát. Journey mới tạo chưa nhận ID từ API tự lưu nên lượt nghe dùng `journey_id = null`; khi mở journey đã lưu, truyền ID thật qua historyContext. Nghe từ thư viện để mood/stage/journey null.
+- Journey mới tạo chưa nhận ID từ API tự lưu nên lượt nghe dùng `journey_id = null`; khi mở journey đã lưu, truyền ID thật qua historyContext. Nếu tên cột hiện tại là `jouney_id`, hàm ghi vào cột đó mà không sửa schema. Mood/stage chỉ ghi khi cột tương ứng đã có, không bắt buộc thêm để làm ba yêu cầu của mục 6.5. Nghe từ thư viện để journey/metadata null.
 - Hàng đợi gửi lỗi nằm trong bộ nhớ: thử lại khi có lượt mới, app trở về foreground, đăng nhập, hoặc bấm **Thử lưu lại**. Không gửi dữ liệu của tài khoản cũ bằng phiên của tài khoản mới. Đóng/reload hẳn ứng dụng trước khi gửi thành công có thể mất những lượt còn chờ; bản này chưa có hàng đợi offline lưu xuống ổ đĩa.
 
 ## Test trên ứng dụng
@@ -54,7 +56,8 @@ Nếu đã chạy đầy đủ migration trước đây thì không cần chạy
 SQL kiểm tra dữ liệu, chạy bằng SQL Editor của quản trị viên:
 
 ```sql
-select h.id, h.user_id, t.title, h.journey_id, h.mood_id, h.stage,
+select h.id, h.user_id, t.title,
+       coalesce(to_jsonb(h)->>'journey_id', to_jsonb(h)->>'jouney_id') as journey_id,
        h.listened_sec, h.completed, h.skipped, h.played_at, h.playback_id
 from public.listening_history h
 join public.tracks t on t.id = h.track_id
@@ -87,9 +90,21 @@ npm run test:db
 
 Bộ SQL test chạy trên database cục bộ, không ghi dữ liệu lên Supabase thật. Các yêu cầu đồng thời được xếp qua engine nhúng; không phải bài kiểm tra tải nhiều kết nối PostgreSQL.
 
+Đã chạy đạt 33 test ứng dụng và 10 tình huống SQL (Node báo 11 tính cả test bao ngoài). Test SQL đối chiếu cấu trúc trước/sau để xác nhận migration không thêm bảng/cột; thử cả trường hợp thiếu mood/stage, tên `jouney_id`, ghi trùng và hoàn tác khi tăng play_count thất bại.
+
 Sau khi cài dependency bằng `npm run install:all`, chạy các lệnh trên ở thư mục gốc. Các bài test SQL chạy trên database cục bộ; cần thử thêm trên ứng dụng để xác nhận quyền RPC và dữ liệu thật của dự án.
 
-## File thay đổi
+## File chỉnh trong lần cập nhật dùng bảng hiện có
+
+- `supabase/migrations/202610170001_record_listening_history.sql`: bỏ lệnh thêm cột; thích ứng với các cột hiện có và giữ ghi lịch sử/tăng play_count trong một giao dịch.
+- `supabase/tests/listening-history-db.test.cjs`: kiểm tra trên cấu trúc đã nêu, không có mood/stage; xác nhận không đổi schema và hỗ trợ `jouney_id`.
+- `.gitignore`, `supabase/package.json`, `supabase/package-lock.json`: đưa bộ chạy test database vào Git; giữ các file Supabase cục bộ khác ngoài Git.
+- `docs/testing/LISTENING_HISTORY_TESTING.md`: hướng dẫn áp dụng SQL và test.
+- `docs/PLAYER_HISTORY_FILES.md`: bổ sung thông tin cập nhật 6.5.
+
+Không sửa các file giao diện/backend Express từ main trong lần này.
+
+## Các file đã có nối luồng ghi lịch sử
 
 - `supabase/migrations/202610170001_record_listening_history.sql`: backend giao dịch, kiểm tra danh tính, chống trùng và tăng play_count.
 - `frontend/services/listening-history-tracker.ts`: đo thời gian nghe và chốt lượt.

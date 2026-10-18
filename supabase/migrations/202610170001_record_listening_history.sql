@@ -1,10 +1,6 @@
--- Extend the existing table; do not recreate listening_history or its primary key.
+-- Use the existing table and columns only. Do not create tables or add columns.
+-- mood_id/stage are optional; both journey_id and the legacy jouney_id are supported.
 begin;
-
-alter table public.listening_history
-  add column if not exists mood_id text,
-  add column if not exists stage text,
-  add column if not exists playback_id text;
 
 create unique index if not exists listening_history_user_playback_uidx
   on public.listening_history (user_id, playback_id);
@@ -29,6 +25,9 @@ as $$
 declare
   v_user_id uuid := auth.uid();
   v_history_id text;
+  v_journey_column text;
+  v_columns text;
+  v_values text := '$1, $2, $3, $4, $5, $6, $7, $8';
 begin
   -- Use the authenticated identity, never a caller-selected user.
   if v_user_id is null or p_user_id is distinct from v_user_id then
@@ -53,17 +52,41 @@ begin
     raise exception 'Journey does not belong to this user' using errcode = '42501';
   end if;
 
-  insert into public.listening_history (
-    user_id, track_id, journey_id, mood_id, stage,
-    listened_sec, completed, skipped, played_at, playback_id
-  ) values (
-    v_user_id, p_track_id, p_journey_id, p_mood_id, p_stage,
-    p_listened_sec, p_listened_sec >= p_duration_sec * 0.8,
+  -- Adapt to existing columns without changing the user's schema.
+  select attname into v_journey_column
+  from pg_catalog.pg_attribute
+  where attrelid = 'public.listening_history'::regclass
+    and attname in ('journey_id', 'jouney_id') and not attisdropped
+  order by case when attname = 'journey_id' then 0 else 1 end
+  limit 1;
+  if v_journey_column is null then
+    raise exception 'listening_history needs its existing journey_id or jouney_id column' using errcode = '42703';
+  end if;
+  v_columns := pg_catalog.format(
+    'user_id, track_id, %I, listened_sec, completed, skipped, played_at, playback_id',
+    v_journey_column
+  );
+  -- Keep metadata for databases that already have it, but never require new columns.
+  if exists (select 1 from pg_catalog.pg_attribute
+    where attrelid = 'public.listening_history'::regclass and attname = 'mood_id' and not attisdropped) then
+    v_columns := v_columns || ', mood_id';
+    v_values := v_values || ', $9';
+  end if;
+  if exists (select 1 from pg_catalog.pg_attribute
+    where attrelid = 'public.listening_history'::regclass and attname = 'stage' and not attisdropped) then
+    v_columns := v_columns || ', stage';
+    v_values := v_values || ', $10';
+  end if;
+  -- Only allowlisted column names are interpolated; all playback values are bound.
+  execute pg_catalog.format(
+    'insert into public.listening_history (%s) values (%s)
+     on conflict (user_id, playback_id) do nothing returning id::text',
+    v_columns, v_values
+  ) into v_history_id using
+    v_user_id, p_track_id, p_journey_id, p_listened_sec,
+    p_listened_sec >= p_duration_sec * 0.8,
     p_end_reason in ('changed', 'stopped') and p_listened_sec < 30,
-    p_played_at, p_playback_id
-  )
-  on conflict (user_id, playback_id) do nothing
-  returning id::text into v_history_id;
+    p_played_at, p_playback_id, p_mood_id, p_stage;
 
   if v_history_id is null then
     return jsonb_build_object('recorded', false, 'reason', 'already_recorded');

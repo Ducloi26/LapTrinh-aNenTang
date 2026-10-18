@@ -77,4 +77,10 @@ CLAUDE.md
 
 # Share safe configuration templates
 !frontend/.env.example
-/supabase
+# Keep local Supabase material ignored; include the database test runner.
+/supabase/*
+!/supabase/package.json
+!/supabase/package-lock.json
+!/supabase/tests/
+/supabase/tests/*
+!/supabase/tests/listening-history-db.test.cjs

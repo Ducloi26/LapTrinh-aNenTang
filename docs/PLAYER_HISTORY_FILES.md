@@ -8,7 +8,7 @@ Danh sách đối chiếu các thay đổi trước đây trong `4aba6c5` (6.2 �
 | --- | --- | --- |
 | Ứng dụng | `frontend/` | Toàn bộ Expo, giao diện, player, lịch sử nghe và tài nguyên âm thanh |
 | Express | `backend/` | Backend từ main; giữ cấu trúc hiện tại |
-| Database | `supabase/migrations/` | Migration và RPC PostgreSQL |
+| Database | `supabase/migration`s/` | Migration và RPC PostgreSQL |
 | Test ứng dụng | `frontend/tests/player/` | Player, nguồn nhạc, lịch sử, khách và tích hợp hành trình |
 | Test database | `supabase/tests/` | Test SQL bằng PGlite, không ghi lên Supabase thật |
 | Tài liệu | `docs/testing/` | Hướng dẫn thử trên Web, điện thoại và database |
@@ -111,3 +111,12 @@ Lưu ý: tài khoản Express/JWT từ main và phiên Supabase dùng để ghi 
 - Expo export Web/Android/iOS thành công, kết quả tại `frontend/dist/reorg-check/` (được Git bỏ qua).
 - Không còn dấu xung đột merge trong mã nguồn; `git diff --check` đạt.
 - Chưa kiểm tra nghe MP3 hoặc khóa màn hình trực tiếp trên điện thoại sau lần sắp xếp này.
+
+## Cập nhật 6.5 ngày 18/10/2026: chỉ dùng bảng hiện có
+
+- SQL `supabase/migrations/202610170001_record_listening_history.sql` đã bỏ toàn bộ lệnh thêm cột. Không cần bảng mới hoặc cột mood/stage để ghi một lượt khi hết/chuyển bài, bỏ lượt dưới năm giây và tăng play_count.
+- Hàm `record_listening_history` nhận cả cấu trúc có `journey_id` hoặc `jouney_id`, ghi mood/stage khi những cột đó đã có; không đổi tên hay thêm cột.
+- Giữ unique index `(user_id, playback_id)` và cập nhật bộ đếm trong cùng giao dịch để thử gửi lại không tăng hai lần.
+- SQL test cục bộ đạt 10 tình huống (11 khi tính test bao ngoài); 33 test ứng dụng đạt. Không sửa lại giao diện hoặc backend Express từ main trong lần này.
+- Bổ sung ngoại lệ Git cho `supabase/tests/listening-history-db.test.cjs` và hai file package của bộ test, vì quy tắc `/supabase` đã khiến những file này chưa được lưu trong commit trước.
+- Cần chạy lại nội dung SQL đã cập nhật trong Supabase SQL Editor trước khi thử ứng dụng. Chưa thực thi lên database thật từ phiên làm việc này.
