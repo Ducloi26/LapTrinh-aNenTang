@@ -862,7 +862,7 @@ app.get('/api/music-dna/:userId/listening-history', async (req, res) => {
     for (let offset = 0; ; offset += pageSize) {
       const { data, error } = await supabase
         .from('listening_history')
-        .select('listened_seconds, completed, tracks!inner(genre, track_features(*))')
+        .select('listened_seconds, completed, played_at, tracks!inner(genre, primary_mood_id, track_features(*), artists(name)), journeys(activity)')
         .eq('user_id', decoded.id)
         .gte('played_at', since.toISOString())
         .gt('listened_seconds', 0)
@@ -878,6 +878,71 @@ app.get('/api/music-dna/:userId/listening-history', async (req, res) => {
     }
 
     return res.json({ success: true, count: records.length, data: records });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * [PUT] /api/music-dna/:userId/listener-type
+ * Cập nhật nhãn định danh đã tính từ lịch sử nghe của người dùng.
+ */
+app.put('/api/music-dna/:userId/listener-type', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({
+      success: false,
+      error: 'Cần cấu hình SUPABASE_SERVICE_ROLE_KEY và chạy migration Music DNA listener type.',
+    });
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, error: 'Chưa cung cấp Token đăng nhập.' });
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+  } catch (err) {
+    return res.status(401).json({ success: false, error: 'Token không hợp lệ hoặc đã hết hạn.' });
+  }
+
+  if (!decoded.id || decoded.id !== req.params.userId) {
+    return res.status(403).json({ success: false, error: 'Không có quyền sửa hồ sơ này.' });
+  }
+
+  const allowedTypes = new Set([
+    'deep_thinker',
+    'flow_seeker',
+    'energy_chaser',
+    'night_dreamer',
+    'soul_healer',
+    'creative_explorer',
+  ]);
+  const { listenerType } = req.body;
+  if (listenerType !== null && !allowedTypes.has(listenerType)) {
+    return res.status(400).json({ success: false, error: 'Loại hồ sơ âm nhạc không hợp lệ.' });
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('app_users')
+      .update({
+        listener_type: listenerType,
+        updated_at: new Date().toISOString(),
+      })
+      .eq('id', decoded.id)
+      .select('listener_type')
+      .maybeSingle();
+
+    if (error) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+    if (!data) {
+      return res.status(404).json({ success: false, error: 'Không tìm thấy hồ sơ người dùng.' });
+    }
+
+    return res.json({ success: true, data: { listenerType: data.listener_type } });
   } catch (err) {
     return res.status(500).json({ success: false, error: err.message });
   }

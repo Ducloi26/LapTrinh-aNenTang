@@ -100,6 +100,7 @@ erDiagram
 | `password_hash` | `TEXT` | `NOT NULL` | Mật khẩu đã băm một chiều an toàn bằng Bcrypt |
 | `display_name` | `VARCHAR(100)` | `NOT NULL`, Default: `'Người nghe'` | Tên hiển thị của người dùng trên giao diện |
 | `role` | `VARCHAR(20)` | `NOT NULL`, Default: `'user'`, Check: `'user', 'admin'` | Phân quyền tài khoản: `'user'` (Người nghe thông thường) hoặc `'admin'` (Quản trị viên hệ thống) |
+| `listener_type` | `VARCHAR(30)` | NULL | Hồ sơ định danh âm nhạc được phân loại từ lịch sử nghe 30 ngày gần nhất. |
 | `created_at` | `TIMESTAMPTZ` | Default: `now()` | Thời điểm tạo tài khoản |
 | `updated_at` | `TIMESTAMPTZ` | Default: `now()` | Thời điểm cập nhật gần nhất |
 
@@ -288,3 +289,5 @@ Bạn có thể chạy trực tiếp các tập tin này trong **Supabase Dashbo
    Tạo 3 bảng lưu trữ Hành trình khoa học: `journeys`, `journey_tracks` và `user_favorites`.
 4. [supabase/music_dna_preferences.sql](supabase/music_dna_preferences.sql):
    Tạo bảng lưu tùy chỉnh Music DNA cho từng người dùng.
+5. [supabase/music_dna_listener_type.sql](supabase/music_dna_listener_type.sql):
+   Thêm loại hồ sơ định danh âm nhạc vào `app_users`.

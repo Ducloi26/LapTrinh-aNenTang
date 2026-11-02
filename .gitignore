@@ -55,6 +55,7 @@ THIET_KE_*
 DATABASE_SCHEMA*
 supabase/*
 !supabase/music_dna_preferences.sql
+!supabase/music_dna_listener_type.sql
 scripts/
 
 
@@ -77,5 +78,4 @@ CLAUDE.md
 *.plan.md
 package-lock.json
 package.json
-
 

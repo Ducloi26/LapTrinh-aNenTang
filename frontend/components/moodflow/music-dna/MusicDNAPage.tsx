@@ -9,6 +9,7 @@ import {
   computeDNA,
   createDefaultDNA,
   saveDNARecommendationPreferences,
+  saveListenerType,
 } from '@/services/dna-service';
 import type {
   DNAProfile,
@@ -116,6 +117,9 @@ export default function MusicDNAPage({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [preferencesStatus, setPreferencesStatus] = useState<string | null>(null);
+  const [listenerTypeStatus, setListenerTypeStatus] = useState<string | null>(
+    null
+  );
   const lastSavedPreferences = useRef<string | null>(null);
   const saveQueue = useRef<Promise<void>>(Promise.resolve());
 
@@ -123,10 +127,27 @@ export default function MusicDNAPage({
     let active = true;
     setLoading(true);
     setError(null);
+    setListenerTypeStatus(null);
 
     computeDNA(userId)
       .then((result) => {
-        if (active) setProfile(result);
+        if (!active) return;
+        setProfile(result);
+        if (!userId || userId === 'guest') return;
+
+        setListenerTypeStatus('Đang lưu hồ sơ định danh...');
+        saveListenerType(userId, result.listenerIdentity?.type ?? null)
+          .then(() => {
+            if (active) setListenerTypeStatus('Hồ sơ đã được cập nhật.');
+          })
+          .catch((cause: unknown) => {
+            if (!active) return;
+            setListenerTypeStatus(
+              cause instanceof Error
+                ? cause.message
+                : 'Không thể lưu hồ sơ định danh âm nhạc.'
+            );
+          });
       })
       .catch((cause: unknown) => {
         if (active) {
@@ -243,6 +264,50 @@ export default function MusicDNAPage({
         </View>
       )}
 
+      <View style={[styles.chartCard, styles.identityCard]}>
+        <Text style={styles.cardHeader}>HỒ SƠ ĐỊNH DANH ÂM NHẠC</Text>
+        {loading ? (
+          <Text style={styles.cardDescription}>
+            Đang phân tích lịch sử nghe để xác định hồ sơ của bạn...
+          </Text>
+        ) : profile.listenerIdentity ? (
+          <>
+            <Text style={styles.identityTitle}>
+              {profile.listenerIdentity.emoji} {profile.listenerIdentity.name}
+            </Text>
+            <Text style={styles.cardDescription}>
+              {profile.listenerIdentity.description}
+            </Text>
+            <Text style={styles.identityArtistsLabel}>
+              3 NGHỆ SĨ TIÊU BIỂU
+            </Text>
+            <Text style={styles.identityArtists}>
+              {profile.listenerIdentity.artists.length > 0
+                ? profile.listenerIdentity.artists.join(' · ')
+                : 'Chưa có dữ liệu nghệ sĩ trong lịch sử nghe.'}
+            </Text>
+          </>
+        ) : (
+          <Text style={styles.cardDescription}>
+            {profile.hasHistory
+              ? 'Chưa có nhóm nào đạt ngưỡng phân loại. Hồ sơ sẽ được cập nhật khi lịch sử nghe thay đổi.'
+              : 'Nghe thêm nhạc để hệ thống có dữ liệu xác định hồ sơ của bạn.'}
+          </Text>
+        )}
+        {listenerTypeStatus ? (
+          <Text
+            style={
+              listenerTypeStatus === 'Đang lưu hồ sơ định danh...' ||
+              listenerTypeStatus === 'Hồ sơ đã được cập nhật.'
+                ? styles.preferenceStatus
+                : styles.preferenceError
+            }
+          >
+            {listenerTypeStatus}
+          </Text>
+        ) : null}
+      </View>
+
       <View style={styles.twoCols}>
         <View style={[styles.chartCard, styles.radarCard]}>
           <Text style={styles.cardHeader}>5 CHỈ SỐ ÂM NHẠC CỦA BẠN</Text>
@@ -301,8 +366,10 @@ export default function MusicDNAPage({
           <View style={styles.preferenceDivider} />
           <Text style={styles.preferenceTitle}>SỞ THÍCH CHO BÀI ĐƯỢC GỢI Ý</Text>
           <Text style={styles.cardDescription}>
-            Tùy chỉnh sẽ điều chỉnh mức năng lượng, BPM mục tiêu và ưu tiên bài
-            có lời khi tạo hành trình mới.
+            Tùy chỉnh sẽ ưu tiên bài gần mức năng lượng, BPM và sở thích giọng
+            hát khi tạo hành trình. Hiện tại, bài được xếp hạng trong danh sách
+            mẫu có sẵn; mức 100% là ưu tiên cao nhất, không đảm bảo mọi chặng
+            đều có bài phù hợp.
           </Text>
           {PREFERENCE_SLIDERS.map((slider) => (
             <DnaSlider
@@ -392,6 +459,28 @@ const styles = StyleSheet.create({
   },
   radarCard: {
     flex: 1.4,
+  },
+  identityCard: {
+    marginBottom: 20,
+  },
+  identityTitle: {
+    color: COLORS.text,
+    fontSize: 22,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  identityArtistsLabel: {
+    color: COLORS.faint,
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.6,
+    marginBottom: 6,
+  },
+  identityArtists: {
+    color: '#67E8F9',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 12,
   },
   metricsCard: {
     flex: 1.2,

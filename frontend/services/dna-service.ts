@@ -14,6 +14,23 @@ export interface DNAProfile {
   hasHistory: boolean;
   listeningSeconds: number;
   trackCount: number;
+  listenerIdentity: ListenerIdentity | null;
+}
+
+export type ListenerType =
+  | 'deep_thinker'
+  | 'flow_seeker'
+  | 'energy_chaser'
+  | 'night_dreamer'
+  | 'soul_healer'
+  | 'creative_explorer';
+
+export interface ListenerIdentity {
+  type: ListenerType;
+  emoji: string;
+  name: string;
+  description: string;
+  artists: string[];
 }
 
 export interface DNARecommendationPreferences {
@@ -30,12 +47,20 @@ export interface GenreShare {
 interface ListeningRecord {
   listened_seconds?: unknown;
   completed?: unknown;
+  played_at?: unknown;
   tracks?: unknown;
+  journeys?: unknown;
 }
 
 interface TrackRecord {
+  artists?: { name?: unknown } | { name?: unknown }[] | null;
   genre?: unknown;
+  primary_mood_id?: unknown;
   track_features?: unknown;
+}
+
+interface JourneyRecord {
+  activity?: unknown;
 }
 
 interface TrackFeatures {
@@ -101,6 +126,189 @@ function getFeatures(record: ListeningRecord): TrackFeatures | null {
 function getTrack(record: ListeningRecord): TrackRecord | null {
   const tracks = record.tracks as TrackRecord | TrackRecord[] | null | undefined;
   return Array.isArray(tracks) ? tracks[0] ?? null : tracks ?? null;
+}
+
+function getJourney(record: ListeningRecord): JourneyRecord | null {
+  const journeys = record.journeys as
+    | JourneyRecord
+    | JourneyRecord[]
+    | null
+    | undefined;
+  return Array.isArray(journeys)
+    ? journeys[0] ?? null
+    : journeys ?? null;
+}
+
+function getArtistName(track: TrackRecord | null): string | null {
+  const artists = track?.artists;
+  const artist = Array.isArray(artists) ? artists[0] : artists;
+  return typeof artist?.name === 'string' && artist.name.trim()
+    ? artist.name.trim()
+    : null;
+}
+
+const LISTENER_TYPES: Omit<ListenerIdentity, 'artists'>[] = [
+  {
+    type: 'deep_thinker',
+    emoji: '🧠',
+    name: 'Deep Thinker',
+    description:
+      'Bạn thường chọn âm nhạc giúp duy trì sự tập trung và suy nghĩ sâu. Những giai điệu có năng lượng vừa phải có thể đồng hành tốt với nhịp làm việc của bạn.',
+  },
+  {
+    type: 'flow_seeker',
+    emoji: '🌊',
+    name: 'Flow Seeker',
+    description:
+      'Bạn thường nghe nhạc có nhịp điệu ổn định trong những phiên làm việc sâu. Âm nhạc dường như là một phần quen thuộc giúp bạn giữ mạch tập trung.',
+  },
+  {
+    type: 'energy_chaser',
+    emoji: '⚡',
+    name: 'Energy Chaser',
+    description:
+      'Bạn thiên về những bản nhạc giàu năng lượng với nhịp nhanh. Những lựa chọn này thường tạo nên một không khí sôi nổi trong lúc nghe.',
+  },
+  {
+    type: 'night_dreamer',
+    emoji: '🌙',
+    name: 'Night Dreamer',
+    description:
+      'Phần lớn thời gian nghe nhạc của bạn diễn ra vào buổi tối muộn. Âm nhạc có thể là khoảng riêng giúp bạn thư giãn sau một ngày dài.',
+  },
+  {
+    type: 'soul_healer',
+    emoji: '💗',
+    name: 'Soul Healer',
+    description:
+      'Bạn dành nhiều thời gian cho những sắc thái âm nhạc trầm lắng và giàu cảm xúc. Những giai điệu này có thể đem lại không gian để bạn lắng nghe cảm xúc của mình.',
+  },
+  {
+    type: 'creative_explorer',
+    emoji: '🎨',
+    name: 'Creative Explorer',
+    description:
+      'Bạn khám phá nhiều trạng thái âm nhạc khác nhau thay vì gắn với một sắc thái duy nhất. Sự đa dạng trong lựa chọn là nét nổi bật của hồ sơ nghe nhạc này.',
+  },
+];
+
+const MOOD_ALIASES: Record<string, string> = {
+  anxious: 'heartbreak_healing',
+  calm: 'calm_unwind',
+  focus: 'deep_focus',
+  energetic: 'energy_boost',
+  dreamy: 'night_serenade',
+  romantic: 'creative_spark',
+  happy: 'euphoric_bliss',
+  sad: 'melancholy_chill',
+};
+
+function normalizeMoodId(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  const moodId = value.trim().toLowerCase();
+  const normalized = MOOD_ALIASES[moodId] ?? moodId;
+  return [
+    'deep_focus',
+    'calm_unwind',
+    'energy_boost',
+    'heartbreak_healing',
+    'creative_spark',
+    'melancholy_chill',
+    'euphoric_bliss',
+    'night_serenade',
+  ].includes(normalized)
+    ? normalized
+    : null;
+}
+
+export function classifyListener(
+  dna: DNAScores,
+  history: ListeningRecord[]
+): ListenerIdentity | null {
+  const totalSeconds = history.reduce(
+    (total, record) => total + Math.max(0, asNumber(record.listened_seconds) ?? 0),
+    0
+  );
+  if (totalSeconds <= 0) return null;
+
+  let deepWorkSeconds = 0;
+  let lateNightSeconds = 0;
+  let emotionalMoodSeconds = 0;
+  let bpmSeconds = 0;
+  let bpmWeight = 0;
+  const moodIds = new Set<string>();
+  const artistSeconds = new Map<string, number>();
+
+  for (const record of history) {
+    const seconds = Math.max(0, asNumber(record.listened_seconds) ?? 0);
+    if (seconds === 0) continue;
+
+    if (getJourney(record)?.activity === 'deep_work') {
+      deepWorkSeconds += seconds;
+    }
+
+    if (typeof record.played_at === 'string') {
+      const playedAt = new Date(record.played_at);
+      if (!Number.isNaN(playedAt.getTime()) && playedAt.getHours() >= 21) {
+        lateNightSeconds += seconds;
+      }
+    }
+
+    const track = getTrack(record);
+    const moodId = normalizeMoodId(track?.primary_mood_id);
+    if (moodId) {
+      moodIds.add(moodId);
+      if (
+        moodId === 'heartbreak_healing' ||
+        moodId === 'melancholy_chill'
+      ) {
+        emotionalMoodSeconds += seconds;
+      }
+    }
+
+    const bpm = asNumber(getFeatures(record)?.bpm);
+    if (bpm !== null) {
+      bpmSeconds += bpm * seconds;
+      bpmWeight += seconds;
+    }
+
+    const artist = getArtistName(track);
+    if (artist) {
+      artistSeconds.set(artist, (artistSeconds.get(artist) ?? 0) + seconds);
+    }
+  }
+
+  const averageBpm = bpmWeight > 0 ? bpmSeconds / bpmWeight : null;
+  const deepWorkShare = deepWorkSeconds / totalSeconds;
+  const lateNightShare = lateNightSeconds / totalSeconds;
+  const emotionalMoodShare = emotionalMoodSeconds / totalSeconds;
+
+  let selectedType: ListenerType | null = null;
+  if (dna.focus > 70 && dna.energy < 40) {
+    selectedType = 'deep_thinker';
+  } else if (dna.rhythm >= 40 && dna.rhythm <= 65 && deepWorkShare > 0.5) {
+    selectedType = 'flow_seeker';
+  } else if (dna.energy > 70 && averageBpm !== null && averageBpm > 120) {
+    selectedType = 'energy_chaser';
+  } else if (lateNightShare > 0.5) {
+    selectedType = 'night_dreamer';
+  } else if (emotionalMoodShare > 0.4) {
+    selectedType = 'soul_healer';
+  } else if (moodIds.size >= 6) {
+    selectedType = 'creative_explorer';
+  }
+
+  if (!selectedType) return null;
+
+  const identity = LISTENER_TYPES.find(({ type }) => type === selectedType);
+  if (!identity) return null;
+
+  const artists = [...artistSeconds.entries()]
+    .sort((first, second) => second[1] - first[1])
+    .slice(0, 3)
+    .map(([artist]) => artist);
+
+  return { ...identity, artists };
 }
 
 function normalizeGenre(value: unknown): string {
@@ -207,6 +415,7 @@ export function createDefaultDNA(): DNAProfile {
     hasHistory: false,
     listeningSeconds: 0,
     trackCount: 0,
+    listenerIdentity: null,
   };
 }
 
@@ -298,6 +507,39 @@ export async function saveDNARecommendationPreferences(
   return normalizeDNARecommendationPreferences(result.data);
 }
 
+export async function saveListenerType(
+  userId: string,
+  listenerType: ListenerType | null
+): Promise<void> {
+  if (!userId || userId === 'guest') {
+    throw new Error('Đăng nhập để lưu hồ sơ định danh âm nhạc.');
+  }
+
+  const token =
+    typeof localStorage !== 'undefined'
+      ? localStorage.getItem('moodflow_token')
+      : null;
+  if (!token) {
+    throw new Error('Phiên đăng nhập không hợp lệ. Vui lòng đăng nhập lại.');
+  }
+
+  const response = await fetch(
+    `${BACKEND_URL}/api/music-dna/${encodeURIComponent(userId)}/listener-type`,
+    {
+      method: 'PUT',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ listenerType }),
+    }
+  );
+  const result = await response.json();
+  if (!response.ok || !result.success) {
+    throw new Error(result.error || 'Không thể lưu hồ sơ định danh âm nhạc.');
+  }
+}
+
 export function aggregateDNA(records: ListeningRecord[]): DNAProfile {
   const energy: { value: number; weight: number }[] = [];
   const depth: { value: number; weight: number }[] = [];
@@ -356,18 +598,20 @@ export function aggregateDNA(records: ListeningRecord[]): DNAProfile {
 
   if (trackCount === 0) return createDefaultDNA();
 
+  const scores = {
+    energy: weightedAverage(energy) ?? DEFAULT_SCORES.energy,
+    depth: weightedAverage(depth) ?? DEFAULT_SCORES.depth,
+    frequency: weightedAverage(frequency) ?? DEFAULT_SCORES.frequency,
+    rhythm: weightedAverage(rhythm) ?? DEFAULT_SCORES.rhythm,
+    focus: weightedAverage(focus) ?? DEFAULT_SCORES.focus,
+  };
   return {
-    scores: {
-      energy: weightedAverage(energy) ?? DEFAULT_SCORES.energy,
-      depth: weightedAverage(depth) ?? DEFAULT_SCORES.depth,
-      frequency: weightedAverage(frequency) ?? DEFAULT_SCORES.frequency,
-      rhythm: weightedAverage(rhythm) ?? DEFAULT_SCORES.rhythm,
-      focus: weightedAverage(focus) ?? DEFAULT_SCORES.focus,
-    },
+    scores,
     genreDistribution: calculateGenreDistribution(genreTotals, listeningSeconds),
     hasHistory: true,
     listeningSeconds,
     trackCount,
+    listenerIdentity: classifyListener(scores, records),
   };
 }
 
@@ -401,7 +645,7 @@ export async function computeDNA(userId: string): Promise<DNAProfile> {
       const { data, error } = await supabase
         .from('listening_history')
         .select(
-          'listened_seconds, completed, tracks!inner(genre, track_features(*))'
+          'listened_seconds, completed, played_at, tracks!inner(genre, primary_mood_id, track_features(*), artists(name)), journeys(activity)'
         )
         .eq('user_id', userId)
         .gte('played_at', since.toISOString())

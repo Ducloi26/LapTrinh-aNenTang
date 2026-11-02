@@ -162,5 +162,5 @@ function preferenceScore(
       : 1 -
         Math.abs((track.vocal ? 100 : 0) - preferences.vocalPreference) / 100;
 
-  return energyMatch * 0.5 + tempoMatch * 0.3 + vocalMatch * 0.2;
+  return energyMatch * 0.3 + tempoMatch * 0.25 + vocalMatch * 0.45;
 }
