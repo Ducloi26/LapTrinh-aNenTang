@@ -1,14 +1,22 @@
 import { COLORS, moodById, Track, TRACK_POOL } from "@/constants/moodflow";
+import { PlayerQueueEntry } from "@/contexts/PlayerContext";
+import { supabase } from "@/lib/supabase";
 import { AIParsedResult } from "@/services/ai-prompt-parser";
 import { presetForMoodActivity } from "@/services/audio-presets";
 import { generateJourney, Journey, Stage } from "@/services/journey-generator";
-import { PlayerQueueEntry, usePlayer } from "@/contexts/PlayerContext";
-import { trackKey } from "@/services/track-source";
+import {
+  normalizeSavedJourney,
+  saveGeneratedJourney,
+} from "@/services/journey-library";
 import { loadMusicCatalog } from "@/services/track-catalog";
-import { supabase } from "@/lib/supabase";
-import { useListenerProfile } from "@/hooks/use-listener-profile";
-import { normalizeSavedJourney, saveGeneratedJourney } from "@/services/journey-library";
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { trackKey } from "@/services/track-source";
+import React, {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import {
   Pressable,
   ScrollView,
@@ -19,11 +27,11 @@ import {
 } from "react-native";
 
 // Shared Layout Components
+import BottomPlayer from "@/components/moodflow/player/BottomPlayer";
 import AmbientGlow from "@/components/moodflow/shared/AmbientGlow";
 import Icon from "@/components/moodflow/shared/Icon";
 import MobileNav from "@/components/moodflow/shared/MobileNav";
 import Sidebar from "@/components/moodflow/shared/Sidebar";
-import BottomPlayer from "@/components/moodflow/player/BottomPlayer";
 
 // Feature Pages
 import CommunityPage from "@/components/moodflow/community/CommunityPage";
@@ -35,7 +43,7 @@ import MyMusicPage from "@/components/moodflow/my-music/MyMusicPage";
 import SettingsPage from "@/components/moodflow/settings/SettingsPage";
 import StatisticsPage from "@/components/moodflow/statistics/StatisticsPage";
 
-// Modals & Player
+
 import AIAssistantModal from "@/components/moodflow/ai-assistant/AIAssistantModal";
 import GeneratingModal from "@/components/moodflow/ai-assistant/GeneratingModal";
 import NowPlayingModal from "@/components/moodflow/player/NowPlayingModal";
@@ -43,36 +51,93 @@ import SessionFeedbackModal from "@/components/moodflow/statistics/SessionFeedba
 
 // Auth Screen
 import AuthScreen from "@/app/auth";
+import type { DNARecommendationPreferences } from "@/services/dna-service";
+import {
+  DEFAULT_DNA_PREFERENCES,
+  getDNARecommendationPreferences,
+} from "@/services/dna-service";
+import { getCurrentUserProfile } from "@/services/mood-service";
 
 export default function MoodFlowMain() {
-  const {
-    playTrack: selectTrack,
-    togglePlay,
-    stop: stopPlayback,
-    setPreset,
-    playing,
-    nowPlaying,
-    stageInfo,
-    elapsedSeconds,
-    durationSeconds,
-    seekTo,
-    initializeLibrary,
-    nextTrack,
-    previousTrack,
-    queue,
-    currentIndex,
-    queueEndCount,
-  } = usePlayer();
   const [authed, setAuthed] = useState(true);
-  const { userId, userName: profileName, userRole, refreshProfile } = useListenerProfile();
   const [userName, setUserName] = useState("Người nghe");
-  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
-  const [logoutPending, setLogoutPending] = useState(false);
-  useEffect(() => setUserName(profileName), [profileName]);
-  const [trackPool, setTrackPool] = useState(TRACK_POOL);
-  const [libraryTracks, setLibraryTracks] = useState<Track[]>([]);
-  const [catalogError, setCatalogError] = useState<string | null>(null);
-  const [catalogLoading, setCatalogLoading] = useState(true);
+  const [userId, setUserId] = useState<string>("guest");
+  const [userRole, setUserRole] = useState<"user" | "admin">("user");
+  const [dnaPreferences, setDnaPreferences] =
+    useState<DNARecommendationPreferences>(DEFAULT_DNA_PREFERENCES);
+  const [dnaPreferencesReady, setDnaPreferencesReady] = useState(false);
+  const [dnaPreferencesLoadError, setDnaPreferencesLoadError] = useState<
+    string | null
+  >(null);
+
+  // Kiểm tra session từ Backend JWT hoặc Supabase Cloud
+  React.useEffect(() => {
+    if (typeof localStorage !== "undefined") {
+      const savedUser = localStorage.getItem("moodflow_user");
+      const savedToken = localStorage.getItem("moodflow_token");
+      if (savedToken && savedUser) {
+        try {
+          const u = JSON.parse(savedUser);
+          if (u?.displayName) setUserName(u.displayName);
+          if (u?.id) setUserId(u.id);
+          if (u?.role) setUserRole(u.role);
+          setAuthed(true);
+        } catch (e) {}
+      }
+    }
+
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      if (session?.user) {
+        setAuthed(true);
+        if (session.user.id) setUserId(session.user.id);
+        getCurrentUserProfile().then((prof) => {
+          if (prof?.displayName) setUserName(prof.displayName);
+        });
+      }
+    });
+
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => {
+      if (session?.user) {
+        setAuthed(true);
+        if (session.user.id) setUserId(session.user.id);
+        getCurrentUserProfile().then((prof) => {
+          if (prof?.displayName) setUserName(prof.displayName);
+        });
+      }
+    });
+
+    return () => subscription.unsubscribe();
+  }, []);
+
+  React.useEffect(() => {
+    let active = true;
+    setDnaPreferencesReady(false);
+    setDnaPreferencesLoadError(null);
+    setDnaPreferences(DEFAULT_DNA_PREFERENCES);
+
+    getDNARecommendationPreferences(userId)
+      .then((preferences) => {
+        if (active) setDnaPreferences(preferences);
+      })
+      .catch((cause: unknown) => {
+        if (active) {
+          setDnaPreferencesLoadError(
+            cause instanceof Error
+              ? cause.message
+              : "Không thể tải tùy chỉnh Music DNA.",
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setDnaPreferencesReady(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [userId]);
 
   // App Navigation & Responsive
   const [page, setPage] = useState("home");
@@ -102,38 +167,55 @@ export default function MoodFlowMain() {
       duration: 30,
     }),
   );
-  const initialJourney = useRef(journey);
 
-  useEffect(() => {
-    let active = true;
-    void loadMusicCatalog().then((catalog) => {
-      if (!active) return;
-      setTrackPool(catalog.pools);
-      setLibraryTracks(catalog.tracks);
-      initializeLibrary(catalog.tracks);
-      setJourney((current) => current === initialJourney.current ? generateJourney({
-        moodFrom: moodById("deep_focus"), moodTo: moodById("calm_unwind"),
-        activity: "deep_work", duration: 30, trackPool: catalog.pools,
-      }) : current);
-    }).catch((reason: unknown) => {
-      if (active) setCatalogError(reason instanceof Error ? reason.message : "Không tải được thư viện nhạc.");
-    }).finally(() => { if (active) setCatalogLoading(false); });
-    return () => { active = false; };
-  }, [initializeLibrary]);
+  // Music Playback state
+  const [nowPlaying, setNowPlaying] = useState<Track | null>(
+    () => TRACK_POOL.acknowledge?.[0] || null,
+  );
+  const [stageInfo, setStageInfo] = useState({
+    index: 0,
+    total: 4,
+    title: "Khởi đầu & Thấu cảm",
+  });
+  const [playing, setPlaying] = useState(false);
+
+  // Cảnh báo người dùng trước khi đóng tab/tắt app khi đang nghe
+  React.useEffect(() => {
+    if (typeof window !== "undefined") {
+      const handleBeforeUnload = (e: any) => {
+        if (playing) {
+          e.preventDefault();
+          e.returnValue =
+            "Bạn có muốn đánh giá phiên trị liệu âm nhạc trước khi rời đi?";
+          return e.returnValue;
+        }
+      };
+      window.addEventListener("beforeunload", handleBeforeUnload);
+      return () =>
+        window.removeEventListener("beforeunload", handleBeforeUnload);
+    }
+  }, [playing]);
 
   const currentMood = moodById(state.moodFrom);
 
   const previousQueueEnd = useRef(queueEndCount);
   useEffect(() => {
-    if (queueEndCount !== previousQueueEnd.current && queue[currentIndex]?.historyContext?.stage) setFeedbackModalOpen(true);
+    if (
+      queueEndCount !== previousQueueEnd.current &&
+      queue[currentIndex]?.historyContext?.stage
+    )
+      setFeedbackModalOpen(true);
     previousQueueEnd.current = queueEndCount;
   }, [queueEndCount, queue, currentIndex]);
 
   useEffect(() => {
-    if (typeof window === 'undefined' || !playing) return;
-    const beforeUnload = (event: BeforeUnloadEvent) => { event.preventDefault(); event.returnValue = ''; };
-    window.addEventListener('beforeunload', beforeUnload);
-    return () => window.removeEventListener('beforeunload', beforeUnload);
+    if (typeof window === "undefined" || !playing) return;
+    const beforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = "";
+    };
+    window.addEventListener("beforeunload", beforeUnload);
+    return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [playing]);
 
   useEffect(() => {
@@ -142,106 +224,182 @@ export default function MoodFlowMain() {
   }, [state.moodTo, state.activity, setPreset]);
 
   // Trigger Journey Generation with 5-step animation
-  const triggerGenerateJourney = useCallback((customState?: typeof state) => {
-    if (catalogLoading || catalogError) return;
-    const activeState = customState || state;
-    setIsGenerating(true);
-    setGenerationStep(0);
+  const triggerGenerateJourney = useCallback(
+    (customState?: typeof state) => {
+      if (catalogLoading || catalogError) return;
+      const activeState = customState || state;
+      setIsGenerating(true);
+      setGenerationStep(0);
 
-    const interval = setInterval(() => {
-      setGenerationStep((prev) => {
-        if (prev < 4) return prev + 1;
-        clearInterval(interval);
-        setTimeout(() => {
-          const j = generateJourney({
-            moodFrom: moodById(activeState.moodFrom),
-            moodTo: moodById(activeState.moodTo),
-            activity: activeState.activity,
-            duration: activeState.duration,
-            trackPool,
-          });
-          setJourney(j);
-          void saveGeneratedJourney(j, userId, userName).catch((error: unknown) => console.error('Không lưu được hành trình', error));
-          setIsGenerating(false);
-          setPage("journey");
-          const first = j.stages[0]?.tracks[0];
-          if (first) {
-            const queue: PlayerQueueEntry[] = j.stages.flatMap((stage, index) =>
-              stage.tracks.map((track) => ({
-                track,
+      const interval = setInterval(() => {
+        setGenerationStep((prev) => {
+          if (prev < 4) return prev + 1;
+          clearInterval(interval);
+          setTimeout(() => {
+            const j = generateJourney({
+              moodFrom: moodById(activeState.moodFrom),
+              moodTo: moodById(activeState.moodTo),
+              activity: activeState.activity,
+              duration: activeState.duration,
+              preferences: dnaPreferences,
+            });
+            setJourney(j);
+            void saveGeneratedJourney(j, userId, userName).catch(
+              (error: unknown) =>
+                console.error("Không lưu được hành trình", error),
+            );
+            setIsGenerating(false);
+            setPage("journey");
+            const first = j.stages[0]?.tracks[0];
+            if (first) {
+              setNowPlaying(first);
+              setStageInfo({
+                index: 0,
+                total: j.stages.length,
+                title: j.stages[0].title,
+              });
+              setPlaying(true);
+              audioSynth.play();
+            }
+
+            // TỰ ĐỘNG LƯU VÀO CSDL BACKEND KHI TẠO HÀNH TRÌNH (GẮN VỚI USER ID)
+            try {
+              const token =
+                typeof localStorage !== "undefined"
+                  ? localStorage.getItem("moodflow_token")
+                  : null;
+              const savedUserStr =
+                typeof localStorage !== "undefined"
+                  ? localStorage.getItem("moodflow_user")
+                  : null;
+              let currentUserId = "guest";
+              if (savedUserStr) {
+                try {
+                  const u = JSON.parse(savedUserStr);
+                  if (u?.id) currentUserId = u.id;
+                } catch (e) {}
+              }
+
+              const headers: Record<string, string> = {
+                "Content-Type": "application/json",
+              };
+              if (token) headers.Authorization = `Bearer ${token}`;
+
+              await fetch("http://localhost:5000/api/journeys", {
+                method: "POST",
+                headers,
+                body: JSON.stringify({
+                  title: `${from.emoji} ${from.label} ➔ ${to.emoji} ${to.label}`,
+                  moodFrom: from,
+                  moodTo: to,
+                  activity: j.activityLabel || activeState.activity,
+                  duration: j.totalMin,
+                  stages: j.stages,
+                  userId: currentUserId,
+                  userName: userName || "Người nghe",
+                }),
+              });
+            } catch (err) {
+              console.error("Lỗi tự động lưu hành trình vào CSDL:", err);
+            }
+          }, 500);
+          return prev;
+        });
+      }, 600);
+    },
+    [
+      selectTrack,
+      state,
+      trackPool,
+      catalogLoading,
+      catalogError,
+      userId,
+      userName,
+    ],
+  );
+
+  const handlePlayTrack = useCallback(
+    (track: Track, stage?: Stage, stageIndex?: number) => {
+      const queue: PlayerQueueEntry[] =
+        stage && stageIndex !== undefined && journey
+          ? journey.stages.flatMap((journeyStage, index) =>
+              journeyStage.tracks.map((journeyTrack) => ({
+                track: journeyTrack,
                 stageInfo: {
                   index,
-                  total: j.stages.length,
-                  title: stage.title,
+                  total: journey.stages.length,
+                  title: journeyStage.title,
                 },
                 historyContext: {
-                  journeyId: j.id ?? null,
-                  moodId: index === 0 ? activeState.moodFrom : activeState.moodTo,
-                  stage: stage.key,
+                  journeyId: journey.id ?? null,
+                  moodId: index === 0 ? journey.moodFromId : journey.moodToId,
+                  stage: journeyStage.key,
                 },
               })),
-            );
-            selectTrack(first, queue[0]?.stageInfo, queue, 0);
-          }
-        }, 500);
-        return prev;
-      });
-    }, 600);
-  }, [selectTrack, state, trackPool, catalogLoading, catalogError, userId, userName]);
+            )
+          : libraryTracks.map((libraryTrack) => ({
+              track: libraryTrack,
+              stageInfo: { index: 0, total: 1, title: "Thư viện" },
+            }));
+      let trackIndex = queue.findIndex(
+        (entry) =>
+          trackKey(entry.track) === trackKey(track) &&
+          (stageIndex === undefined || entry.stageInfo?.index === stageIndex),
+      );
+      if (trackIndex < 0) {
+        queue.unshift({ track, stageInfo: null });
+        trackIndex = 0;
+      }
+      const selectedStage =
+        stage && stageIndex !== undefined && journey
+          ? {
+              index: stageIndex,
+              total: journey.stages.length,
+              title: stage.title,
+            }
+          : queue[trackIndex]?.stageInfo;
+      selectTrack(track, selectedStage, queue, trackIndex);
+    },
+    [journey, selectTrack, libraryTracks],
+  );
 
-  const handlePlayTrack = useCallback((
-    track: Track,
-    stage?: Stage,
-    stageIndex?: number,
-  ) => {
-    const queue: PlayerQueueEntry[] = stage && stageIndex !== undefined && journey
-      ? journey.stages.flatMap((journeyStage, index) =>
-          journeyStage.tracks.map((journeyTrack) => ({
-            track: journeyTrack,
+  const handleSelectJourney = useCallback(
+    (raw: unknown) => {
+      const selected = normalizeSavedJourney(raw, libraryTracks);
+      setJourney(selected);
+      setState((current) => ({
+        ...current,
+        moodFrom: selected.moodFrom.id,
+        moodTo: selected.moodTo.id,
+      }));
+      setPage("journey");
+      const entries: PlayerQueueEntry[] = selected.stages.flatMap(
+        (stage, index) =>
+          stage.tracks.map((track) => ({
+            track,
             stageInfo: {
               index,
-              total: journey.stages.length,
-              title: journeyStage.title,
+              total: selected.stages.length,
+              title: stage.title,
             },
             historyContext: {
-              journeyId: journey.id ?? null,
-              moodId: index === 0 ? journey.moodFromId : journey.moodToId,
-              stage: journeyStage.key,
+              journeyId: selected.id ?? null,
+              moodId: index === 0 ? selected.moodFromId : selected.moodToId,
+              stage: stage.key,
             },
           })),
-        )
-      : libraryTracks.map((libraryTrack) => ({
-          track: libraryTrack,
-          stageInfo: { index: 0, total: 1, title: "Thư viện" },
-        }));
-    let trackIndex = queue.findIndex((entry) =>
-      trackKey(entry.track) === trackKey(track) &&
-      (stageIndex === undefined || entry.stageInfo?.index === stageIndex),
-    );
-    if (trackIndex < 0) {
-      queue.unshift({ track, stageInfo: null });
-      trackIndex = 0;
-    }
-    const selectedStage = stage && stageIndex !== undefined && journey
-      ? { index: stageIndex, total: journey.stages.length, title: stage.title }
-      : queue[trackIndex]?.stageInfo;
-    selectTrack(track, selectedStage, queue, trackIndex);
-  }, [journey, selectTrack, libraryTracks]);
-
-  const handleSelectJourney = useCallback((raw: unknown) => {
-    const selected = normalizeSavedJourney(raw, libraryTracks);
-    setJourney(selected);
-    setState((current) => ({ ...current, moodFrom: selected.moodFrom.id, moodTo: selected.moodTo.id }));
-    setPage('journey');
-    const entries: PlayerQueueEntry[] = selected.stages.flatMap((stage, index) => stage.tracks.map((track) => ({
-      track, stageInfo: { index, total: selected.stages.length, title: stage.title },
-      historyContext: { journeyId: selected.id ?? null, moodId: index === 0 ? selected.moodFromId : selected.moodToId, stage: stage.key },
-    })));
-    if (entries[0]) selectTrack(entries[0].track, entries[0].stageInfo, entries, 0);
-  }, [libraryTracks, selectTrack]);
+      );
+      if (entries[0])
+        selectTrack(entries[0].track, entries[0].stageInfo, entries, 0);
+    },
+    [libraryTracks, selectTrack],
+  );
 
   const handleNextTrack = () => {
-    if (queue[currentIndex]?.historyContext?.stage && currentIndex === queue.length - 1) {
+    if (
+      queue[currentIndex]?.historyContext?.stage &&
+      currentIndex === queue.length - 1
+    ) {
       void stopPlayback();
       setFeedbackModalOpen(true);
     } else nextTrack();
@@ -263,19 +421,21 @@ export default function MoodFlowMain() {
   };
 
   const performActualLogout = useCallback(() => {
-    void stopPlayback().then(async () => {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.removeItem('moodflow_token');
-        localStorage.removeItem('moodflow_user');
-      }
-      const { error } = await supabase.auth.signOut();
-      if (error) console.error('Failed to sign out', error);
-      setAuthed(false);
-      setLogoutPending(false);
-    }).catch((error: unknown) => {
-      console.error('Failed to stop audio before logout', error);
-      setAuthed(false);
-    });
+    void stopPlayback()
+      .then(async () => {
+        if (typeof localStorage !== "undefined") {
+          localStorage.removeItem("moodflow_token");
+          localStorage.removeItem("moodflow_user");
+        }
+        const { error } = await supabase.auth.signOut();
+        if (error) console.error("Failed to sign out", error);
+        setAuthed(false);
+        setLogoutPending(false);
+      })
+      .catch((error: unknown) => {
+        console.error("Failed to stop audio before logout", error);
+        setAuthed(false);
+      });
   }, [stopPlayback]);
 
   const handleLogout = useCallback(() => {
@@ -305,22 +465,58 @@ export default function MoodFlowMain() {
           />
         );
       case "dna":
-        return <MusicDNAPage />;
+        return (
+          <MusicDNAPage
+            userId={userId}
+            preferences={dnaPreferences}
+            preferencesReady={dnaPreferencesReady}
+            preferencesLoadError={dnaPreferencesLoadError}
+            onPreferencesChange={setDnaPreferences}
+          />
+        );
       case "discover":
         return <DiscoverPage />;
       case "mymusic":
-        return <MyMusicPage tracks={libraryTracks} onPlayTrack={handlePlayTrack} onSelectJourney={handleSelectJourney} onGoToHome={() => setPage('home')} />;
-      case "community":
-        return <CommunityPage onSelectJourney={handleSelectJourney} userId={userId} userName={userName} userRole={userRole} />;
-      case "stats":
-        return <StatisticsPage userId={userId} userName={userName} currentJourney={journey} />;
-      case "settings":
         return (
-          <SettingsPage
-            onLogout={handleLogout}
-            userName={userName}
+          <MyMusicPage
+            onPlayTrack={handlePlayTrack}
+            onSelectJourney={(selectedJ) => {
+              setJourney(selectedJ);
+              setPage("journey");
+              const first = selectedJ.stages?.[0]?.tracks?.[0];
+              if (first) {
+                handlePlayTrack(first, selectedJ.stages[0], 0);
+              }
+            }}
+            onGoToHome={() => setPage("home")}
           />
         );
+      case "community":
+        return (
+          <CommunityPage
+            onSelectJourney={(selectedJ) => {
+              setJourney(selectedJ);
+              setPage("journey");
+              const first = selectedJ.stages?.[0]?.tracks?.[0];
+              if (first) {
+                handlePlayTrack(first, selectedJ.stages[0], 0);
+              }
+            }}
+            userId={userId}
+            userName={userName}
+            userRole={userRole}
+          />
+        );
+      case "stats":
+        return (
+          <StatisticsPage
+            userId={userId}
+            userName={userName}
+            currentJourney={journey}
+          />
+        );
+      case "settings":
+        return <SettingsPage onLogout={handleLogout} userName={userName} />;
       default:
         return null;
     }
@@ -329,21 +525,42 @@ export default function MoodFlowMain() {
     state,
     journey,
     userName,
-    handleLogout,
-    handlePlayTrack,
-    triggerGenerateJourney,
-    libraryTracks,
-    handleSelectJourney,
+    playing,
     userId,
     userRole,
+    dnaPreferences,
+    dnaPreferencesReady,
+    dnaPreferencesLoadError,
   ]);
+
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+  const [logoutPending, setLogoutPending] = useState(false);
+
+  const performActualLogout = async () => {
+    if (typeof localStorage !== "undefined") {
+      localStorage.removeItem("moodflow_token");
+      localStorage.removeItem("moodflow_user");
+    }
+    try {
+      await supabase.auth.signOut();
+    } catch (e) {}
+    audioSynth.pause();
+    setPlaying(false);
+    setAuthed(false);
+    setLogoutPending(false);
+  };
+
+  const handleLogout = () => {
+    // Khi người dùng bấm đăng xuất hoặc tắt app: Bật Pop-up đánh giá cảm xúc & lưu CSDL
+    setLogoutPending(true);
+    setFeedbackModalOpen(true);
+  };
 
   // If user is not logged in, render AuthScreen
   if (!authed) {
     return (
       <AuthScreen
         onAuthSuccess={(name) => {
-          refreshProfile();
           setUserName(name || "Người nghe");
           setAuthed(true);
         }}
@@ -392,21 +609,46 @@ export default function MoodFlowMain() {
             </Pressable>
           </View>
 
-          {catalogLoading && <Text style={{ color: COLORS.muted, marginBottom: 12 }}>Đang tải thư viện nhạc…</Text>}
-          {!catalogLoading && <View style={{ marginBottom: 12, gap: 8 }}>
-            {catalogError && <Text accessibilityRole="alert" style={{ color: COLORS.danger }}>{catalogError}</Text>}
-            <Pressable onPress={() => {
-              setCatalogLoading(true);
-              setCatalogError(null);
-              void loadMusicCatalog().then((catalog) => {
-                setTrackPool(catalog.pools);
-                setLibraryTracks(catalog.tracks);
-                initializeLibrary(catalog.tracks);
-                setJourney(null);
-              }).catch((reason: unknown) => setCatalogError(reason instanceof Error ? reason.message : "Không tải được thư viện nhạc."))
-                .finally(() => setCatalogLoading(false));
-            }}><Text style={{ color: COLORS.ok }}>Tải lại thư viện</Text></Pressable>
-          </View>}
+          {catalogLoading && (
+            <Text style={{ color: COLORS.muted, marginBottom: 12 }}>
+              Đang tải thư viện nhạc…
+            </Text>
+          )}
+          {!catalogLoading && (
+            <View style={{ marginBottom: 12, gap: 8 }}>
+              {catalogError && (
+                <Text
+                  accessibilityRole="alert"
+                  style={{ color: COLORS.danger }}
+                >
+                  {catalogError}
+                </Text>
+              )}
+              <Pressable
+                onPress={() => {
+                  setCatalogLoading(true);
+                  setCatalogError(null);
+                  void loadMusicCatalog()
+                    .then((catalog) => {
+                      setTrackPool(catalog.pools);
+                      setLibraryTracks(catalog.tracks);
+                      initializeLibrary(catalog.tracks);
+                      setJourney(null);
+                    })
+                    .catch((reason: unknown) =>
+                      setCatalogError(
+                        reason instanceof Error
+                          ? reason.message
+                          : "Không tải được thư viện nhạc.",
+                      ),
+                    )
+                    .finally(() => setCatalogLoading(false));
+                }}
+              >
+                <Text style={{ color: COLORS.ok }}>Tải lại thư viện</Text>
+              </Pressable>
+            </View>
+          )}
           {pageContent}
         </ScrollView>
       </View>
@@ -427,12 +669,16 @@ export default function MoodFlowMain() {
       )}
 
       {/* Persistent Bottom Music Player */}
-        <BottomPlayer
-          bottomOffset={isDesktop ? 0 : 60}
-          onOpenNowPlaying={() => setNowPlayingModal(true)}
-          onNext={handleNextTrack}
-          onPrev={previousTrack}
-        />
+      <BottomPlayer
+        nowPlaying={nowPlaying}
+        playing={playing}
+        setPlaying={handleTogglePlay}
+        stageInfo={stageInfo}
+        onOpenNowPlaying={() => setNowPlayingModal(true)}
+        onNext={handleNextTrack}
+        onPrev={handlePrevTrack}
+        onFinishJourney={() => setFeedbackModalOpen(true)}
+      />
 
       {/* Full-Screen Now Playing Experience Modal */}
       {nowPlayingModal && (

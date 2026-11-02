@@ -48,9 +48,21 @@ data/
 *.doc
 KE_HOACH_CHI_TIET.*
 THIET_KE_*
+<<<<<<< HEAD
 
 # Bản nháp schema cục bộ
 DATABASE_SCHEMA*
+=======
+/THONG_KE_CHUC_NANG_DA_LAM/
+*.docx
+*.doc
+# Database & scripts phụ trợ (trừ migration Music DNA)
+DATABASE_SCHEMA*
+supabase/*
+!supabase/music_dna_preferences.sql
+!supabase/music_dna_listener_type.sql
+scripts/
+>>>>>>> giu-code-push-nham
 
 
 # typescript
@@ -74,7 +86,6 @@ CLAUDE.md
 
 
 
-
 # Share safe configuration templates
 !frontend/.env.example
 # Keep local Supabase material ignored; include the database test runner.
@@ -85,3 +96,4 @@ CLAUDE.md
 /supabase/tests/*
 !/supabase/tests/listening-history-db.test.cjs
 /docs/testing/PLAYER_HISTORY_FILES.md
+

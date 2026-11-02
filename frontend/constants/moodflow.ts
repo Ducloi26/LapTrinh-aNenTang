@@ -105,6 +105,7 @@ export interface Track {
   audioUrl?: string;
   bpm?: number;
   valence?: number;
+  vocal?: boolean;
   psychologicalEffect?: string;
   mood?: string;
   reason?: string;
@@ -112,24 +113,24 @@ export interface Track {
 
 export const TRACK_POOL: Record<string, Track[]> = {
   acknowledge: [
-    { title: 'Chậm Lại Một Nhịp', artist: 'Vũ & Minh Đinh', genre: 'Indie Pop', energy: 28, bpm: 68, psychologicalEffect: 'Đồng điệu nỗi buồn, giải tỏa cortisol căng thẳng', duration: '3:45', cover: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=300&auto=format&fit=crop&q=80' },
-    { title: 'Mưa Đầu Mùa', artist: 'Thái Đinh', genre: 'Acoustic Ballad', energy: 32, bpm: 72, psychologicalEffect: 'Thấu cảm cảm xúc, kích hoạt sóng Alpha êm dịu', duration: '4:10', cover: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=300&auto=format&fit=crop&q=80' },
-    { title: 'Tĩnh Lặng Giữa Đêm', artist: 'Hà Anh Tuấn', genre: 'Ballad', energy: 25, bpm: 65, psychologicalEffect: 'An định tinh thần, hạ nhịp tim về mức thư giãn', duration: '3:50', cover: 'https://images.unsplash.com/photo-1447752875215-b2761acb3c5d?w=300&auto=format&fit=crop&q=80' },
+    { title: 'Chậm Lại Một Nhịp', artist: 'Vũ & Minh Đinh', genre: 'Indie Pop', energy: 28, bpm: 68, vocal: true, psychologicalEffect: 'Đồng điệu nỗi buồn, giải tỏa cortisol căng thẳng', duration: '3:45', cover: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=300&auto=format&fit=crop&q=80' },
+    { title: 'Mưa Đầu Mùa', artist: 'Thái Đinh', genre: 'Acoustic Ballad', energy: 32, bpm: 72, vocal: true, psychologicalEffect: 'Thấu cảm cảm xúc, kích hoạt sóng Alpha êm dịu', duration: '4:10', cover: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=300&auto=format&fit=crop&q=80' },
+    { title: 'Tĩnh Lặng Giữa Đêm', artist: 'Hà Anh Tuấn', genre: 'Ballad', energy: 25, bpm: 65, vocal: true, psychologicalEffect: 'An định tinh thần, hạ nhịp tim về mức thư giãn', duration: '3:50', cover: 'https://images.unsplash.com/photo-1447752875215-b2761acb3c5d?w=300&auto=format&fit=crop&q=80' },
   ],
   transition: [
-    { title: 'Dòng Chảy Bình Yên', artist: 'Lê Cát Trọng Lý', genre: 'Folk Chill', energy: 45, bpm: 84, psychologicalEffect: 'Chuyển hóa năng lượng, giảm tải ức chế tiền đình', duration: '3:30', cover: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300&auto=format&fit=crop&q=80' },
-    { title: 'Gió Qua Rừng Thông', artist: 'Hoàng Dũng', genre: 'Acoustic', energy: 48, bpm: 88, psychologicalEffect: 'Kích thích lưu thông máu nhẹ nhàng, mở rộng chú ý', duration: '4:02', cover: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=80' },
-    { title: 'Sương Mai', artist: 'Nguyên Hà', genre: 'Lo-fi Chill', energy: 42, bpm: 80, psychologicalEffect: 'Thả lỏng cơ bắp, cân bằng bán cầu não', duration: '3:22', cover: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=300&auto=format&fit=crop&q=80' },
+    { title: 'Dòng Chảy Bình Yên', artist: 'Lê Cát Trọng Lý', genre: 'Folk Chill', energy: 45, bpm: 84, vocal: true, psychologicalEffect: 'Chuyển hóa năng lượng, giảm tải ức chế tiền đình', duration: '3:30', cover: 'https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=300&auto=format&fit=crop&q=80' },
+    { title: 'Gió Qua Rừng Thông', artist: 'Hoàng Dũng', genre: 'Acoustic', energy: 48, bpm: 88, vocal: true, psychologicalEffect: 'Kích thích lưu thông máu nhẹ nhàng, mở rộng chú ý', duration: '4:02', cover: 'https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=300&auto=format&fit=crop&q=80' },
+    { title: 'Sương Mai', artist: 'Nguyên Hà', genre: 'Lo-fi Chill', energy: 42, bpm: 80, vocal: true, psychologicalEffect: 'Thả lỏng cơ bắp, cân bằng bán cầu não', duration: '3:22', cover: 'https://images.unsplash.com/photo-1492684223066-81342ee5ff30?w=300&auto=format&fit=crop&q=80' },
   ],
   elevate: [
-    { title: 'Bình Minh Rạng Rỡ', artist: 'Da LAB', genre: 'Indie RnB', energy: 70, bpm: 105, psychologicalEffect: 'Tăng tiết Dopamine, nâng cao động lực hành động', duration: '3:35', cover: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=80' },
-    { title: 'Nắng Ban Mai', artist: 'Bùi Công Nam', genre: 'Pop Acoustic', energy: 72, bpm: 110, psychologicalEffect: 'Thắp sáng tâm trạng, đánh thức hưng phấn tự nhiên', duration: '3:28', cover: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=300&auto=format&fit=crop&q=80' },
-    { title: 'Bước Chân Đầu Tiên', artist: 'Chillies', genre: 'Pop Rock', energy: 75, bpm: 115, psychologicalEffect: 'Củng cố sự tự tin, tạo nhịp điệu làm việc dồi dào', duration: '3:50', cover: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80' },
+    { title: 'Bình Minh Rạng Rỡ', artist: 'Da LAB', genre: 'Indie RnB', energy: 70, bpm: 105, vocal: true, psychologicalEffect: 'Tăng tiết Dopamine, nâng cao động lực hành động', duration: '3:35', cover: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=80' },
+    { title: 'Nắng Ban Mai', artist: 'Bùi Công Nam', genre: 'Pop Acoustic', energy: 72, bpm: 110, vocal: true, psychologicalEffect: 'Thắp sáng tâm trạng, đánh thức hưng phấn tự nhiên', duration: '3:28', cover: 'https://images.unsplash.com/photo-1518609878373-06d740f60d8b?w=300&auto=format&fit=crop&q=80' },
+    { title: 'Bước Chân Đầu Tiên', artist: 'Chillies', genre: 'Pop Rock', energy: 75, bpm: 115, vocal: true, psychologicalEffect: 'Củng cố sự tự tin, tạo nhịp điệu làm việc dồi dào', duration: '3:50', cover: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80' },
   ],
   transcendence: [
-    { title: 'Ánh Sáng Thuần Khiết', artist: 'Trịnh Công Sơn (Instrumental)', genre: 'Neo-Classical', energy: 50, bpm: 90, psychologicalEffect: 'Trạng thái Flow State, duy trì năng lượng bền vững đỉnh cao', duration: '4:15', cover: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=300&auto=format&fit=crop&q=80' },
-    { title: 'Khát Vọng Bay Xa', artist: 'Sơn Tùng M-TP', genre: 'Electro Pop', energy: 88, bpm: 128, psychologicalEffect: 'Thăng hoa toàn diện, kích hoạt trạng thái hân hoan tuyệt đối', duration: '3:40', cover: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=80' },
-    { title: 'Giấc Mơ Bình Yên', artist: 'Quốc Bảo', genre: 'Ambient Piano', energy: 30, bpm: 60, psychologicalEffect: 'Sóng Theta sâu, neo giữ sự bình an nội tại', duration: '4:30', cover: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=300&auto=format&fit=crop&q=80' },
+    { title: 'Ánh Sáng Thuần Khiết', artist: 'Trịnh Công Sơn (Instrumental)', genre: 'Neo-Classical', energy: 50, bpm: 90, vocal: false, psychologicalEffect: 'Trạng thái Flow State, duy trì năng lượng bền vững đỉnh cao', duration: '4:15', cover: 'https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=300&auto=format&fit=crop&q=80' },
+    { title: 'Khát Vọng Bay Xa', artist: 'Sơn Tùng M-TP', genre: 'Electro Pop', energy: 88, bpm: 128, vocal: true, psychologicalEffect: 'Thăng hoa toàn diện, kích hoạt trạng thái hân hoan tuyệt đối', duration: '3:40', cover: 'https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=300&auto=format&fit=crop&q=80' },
+    { title: 'Giấc Mơ Bình Yên', artist: 'Quốc Bảo', genre: 'Ambient Piano', energy: 30, bpm: 60, vocal: false, psychologicalEffect: 'Sóng Theta sâu, neo giữ sự bình an nội tại', duration: '4:30', cover: 'https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=300&auto=format&fit=crop&q=80' },
   ],
 };
 

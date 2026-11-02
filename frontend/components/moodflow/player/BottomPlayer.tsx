@@ -8,8 +8,8 @@ import {
   View,
 } from 'react-native';
 import { COLORS } from '@/constants/moodflow';
-import { SYNTH_PRESETS, SynthPresetId } from '@/services/audio-presets';
 import { usePlayer } from '@/contexts/PlayerContext';
+import { SYNTH_PRESETS, SynthPresetId } from '@/services/audio-presets';
 import Icon from '@/components/moodflow/shared/Icon';
 import SoundWave from '@/components/moodflow/player/SoundWave';
 
@@ -18,6 +18,7 @@ interface BottomPlayerProps {
   onOpenNowPlaying: () => void;
   onNext?: () => void;
   onPrev?: () => void;
+  onFinishJourney?: () => void;
 }
 
 function formatTime(seconds: number) {
@@ -30,6 +31,7 @@ export default function BottomPlayer({
   onOpenNowPlaying,
   onNext,
   onPrev,
+  onFinishJourney,
 }: BottomPlayerProps) {
   const {
     nowPlaying,
@@ -74,7 +76,9 @@ export default function BottomPlayer({
     volumeTrackRef.current?.measureInWindow((left) => setVolumeLeft(left));
   };
 
-  const handleProgressPress = (event: { nativeEvent: { locationX: number; pageX: number } }) => {
+  const handleProgressPress = (event: {
+    nativeEvent: { locationX: number; pageX: number };
+  }) => {
     const { locationX, pageX } = event.nativeEvent;
     const clickX = Number.isFinite(locationX)
       ? locationX
@@ -86,7 +90,9 @@ export default function BottomPlayer({
     seekTo((position / progressWidth) * durationSeconds);
   };
 
-  const handleVolumePress = (event: { nativeEvent: { locationX: number; pageX: number } }) => {
+  const handleVolumePress = (event: {
+    nativeEvent: { locationX: number; pageX: number };
+  }) => {
     const { locationX, pageX } = event.nativeEvent;
     const clickX = Number.isFinite(locationX)
       ? locationX
@@ -97,20 +103,29 @@ export default function BottomPlayer({
     setVolume(Math.max(0, Math.min(1, clickX / volumeWidth)));
   };
 
+  const progressPercent = durationSeconds > 0
+    ? Math.min(100, (elapsedSeconds / durationSeconds) * 100)
+    : 0;
+
   return (
     <View style={[styles.footer, { bottom: bottomOffset }]}>
       <View style={styles.mainRow}>
         <Pressable
           accessibilityRole="button"
-          accessibilityLabel="Mở màn hình đang phát"
+          accessibilityLabel={`Mở màn hình đang phát: ${nowPlaying.title}`}
           onPress={onOpenNowPlaying}
           style={styles.trackInfo}
         >
           <View style={styles.coverWrap}>
-            <Image
-              source={{ uri: nowPlaying.cover }}
-              style={[styles.coverImg, playing && styles.coverPlaying]}
-            />
+            {nowPlaying.cover ? (
+              <Image
+                source={{ uri: nowPlaying.cover }}
+                style={[styles.coverImg, playing && styles.coverPlaying]}
+                resizeMode="cover"
+              />
+            ) : (
+              <Icon name="music" size={17} color={COLORS.muted} />
+            )}
           </View>
           <View style={styles.trackTextWrap}>
             <Text style={styles.trackTitle} numberOfLines={1}>
@@ -119,58 +134,91 @@ export default function BottomPlayer({
             <Text style={styles.trackArtist} numberOfLines={1}>
               {nowPlaying.artist} · BPM {nowPlaying.bpm ?? '—'}
             </Text>
-            <Text style={styles.stageText} numberOfLines={1}>
-              Giai đoạn {stageInfo ? `${stageInfo.index + 1}/${stageInfo.total} · ${stageInfo.title}` : '—'}
-            </Text>
           </View>
         </Pressable>
 
-        <View style={styles.controls}>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={elapsedSeconds > 3 ? 'Quay lại đầu bài' : 'Bài trước'}
-            onPress={onPrev || previousTrack}
-            style={styles.controlBtn}
-          >
-            <Icon name="skipback" size={17} color={COLORS.muted} />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel={isBuffering ? 'Đang tải nhạc, bấm để tạm dừng' : 'Phát hoặc tạm dừng'}
-            onPress={togglePlay}
-            style={styles.playBtn}
-          >
-            <Icon
-              name={playing ? 'pause' : 'play'}
-              size={15}
-              color="#0A0D16"
-            />
-          </Pressable>
-          <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Bài tiếp theo"
-            onPress={onNext || nextTrack}
-            style={styles.controlBtn}
-          >
-            <Icon name="skipforward" size={17} color={COLORS.muted} />
-          </Pressable>
-          <SoundWave playing={playing} />
+        <View style={styles.centerSection}>
+          <View style={styles.controlRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={elapsedSeconds > 3 ? 'Quay lại đầu bài' : 'Bài trước'}
+              onPress={onPrev || previousTrack}
+              style={styles.iconBtn}
+            >
+              <Icon name="skipback" size={16} color={COLORS.muted} />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={isBuffering ? 'Đang tải nhạc, bấm để tạm dừng' : playing ? 'Tạm dừng' : 'Phát nhạc'}
+              onPress={togglePlay}
+              style={styles.playBtn}
+            >
+              <Icon
+                name={playing ? 'pause' : 'play'}
+                size={15}
+                color="#0A0D16"
+              />
+            </Pressable>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Bài tiếp theo"
+              onPress={onNext || nextTrack}
+              style={styles.iconBtn}
+            >
+              <Icon name="skipforward" size={16} color={COLORS.muted} />
+            </Pressable>
+            <SoundWave playing={playing} />
+          </View>
+          <View style={styles.progressRow}>
+            <Text style={styles.timeText}>{formatTime(elapsedSeconds)}</Text>
+            <Pressable
+              accessibilityRole="adjustable"
+              accessibilityLabel="Tiến trình phát"
+              accessibilityValue={{
+                min: 0,
+                max: durationSeconds,
+                now: Math.min(elapsedSeconds, durationSeconds),
+              }}
+              ref={progressRef}
+              onLayout={handleProgressLayout}
+              onPress={handleProgressPress}
+              style={styles.progressTrack}
+            >
+              <View style={[styles.progressFill, { width: `${progressPercent}%` }]} />
+            </Pressable>
+            <Text style={styles.timeText}>{formatTime(durationSeconds)}</Text>
+          </View>
         </View>
 
-        <View style={styles.rightControls}>
+        <View style={styles.rightSection}>
+          {onFinishJourney && (
+            <Pressable
+              onPress={onFinishJourney}
+              style={styles.finishBtn}
+              accessibilityRole="button"
+              accessibilityLabel="Đánh giá hành trình"
+            >
+              <Text style={styles.finishBtnText}>🏁 Đánh giá</Text>
+            </Pressable>
+          )}
+          {stageInfo && (
+            <Text style={styles.stageText} numberOfLines={1}>
+              Giai đoạn {stageInfo.index + 1}/{stageInfo.total} · {stageInfo.title}
+            </Text>
+          )}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Dừng phát"
             onPress={() => void stop()}
-            style={styles.controlBtn}
+            style={styles.rightBtn}
           >
             <View style={styles.stopIcon} />
           </Pressable>
           <Pressable
-            accessibilityRole="button"
-            accessibilityLabel="Mở màn hình phát nhạc"
             onPress={onOpenNowPlaying}
-            style={styles.expandBtn}
+            style={styles.rightBtn}
+            accessibilityRole="button"
+            accessibilityLabel="Mở trình phát"
           >
             <Icon name="maximize" size={16} color={COLORS.muted} />
           </Pressable>
@@ -178,34 +226,6 @@ export default function BottomPlayer({
       </View>
 
       {isBuffering && <Text style={styles.stageText}>Đang tải nhạc…</Text>}
-      <View style={styles.progressRow}>
-        <Text style={styles.timeText}>{formatTime(elapsedSeconds)}</Text>
-        <Pressable
-          accessibilityRole="adjustable"
-          accessibilityLabel="Tiến trình phát"
-          accessibilityValue={{
-            min: 0,
-            max: durationSeconds,
-            now: Math.min(elapsedSeconds, durationSeconds),
-          }}
-          ref={progressRef}
-          onLayout={handleProgressLayout}
-          onPress={handleProgressPress}
-          style={styles.progressTrack}
-        >
-          <View
-            style={[
-              styles.progressFill,
-              {
-                width: `${durationSeconds > 0
-                  ? Math.min(100, (elapsedSeconds / durationSeconds) * 100)
-                  : 0}%`,
-              },
-            ]}
-          />
-        </Pressable>
-        <Text style={styles.timeText}>{formatTime(durationSeconds)}</Text>
-      </View>
 
       <View style={styles.settingsRow}>
         <View style={styles.presetList}>
@@ -219,12 +239,7 @@ export default function BottomPlayer({
                 onPress={() => void setPreset(id)}
                 style={[styles.presetButton, selected && styles.presetButtonActive]}
               >
-                <Text
-                  style={[
-                    styles.presetText,
-                    selected && styles.presetTextActive,
-                  ]}
-                >
+                <Text style={[styles.presetText, selected && styles.presetTextActive]}>
                   {SYNTH_PRESETS[id].label}
                 </Text>
               </Pressable>
@@ -232,47 +247,56 @@ export default function BottomPlayer({
           })}
         </View>
 
-          <View style={styles.volumeControl}>
-            <Icon name="volume" size={15} color={COLORS.muted} />
-            <Pressable
-              accessibilityRole="adjustable"
-              accessibilityLabel="Âm lượng nhạc"
-              accessibilityValue={{
-                min: 0,
-                max: 100,
-                now: Math.round(volume * 100),
-              }}
-              ref={volumeTrackRef}
-              onLayout={handleVolumeLayout}
-              onPress={handleVolumePress}
-              style={styles.volumeTrack}
-            >
-              <View
-                style={[styles.volumeFill, { width: `${volume * 100}%` }]}
-              />
-              <View
-                style={[
-                  styles.volumeThumb,
-                  { left: `${volume * 100}%` },
-                ]}
-              />
-            </Pressable>
-            <Text style={styles.volumeText}>{Math.round(volume * 100)}%</Text>
-          </View>
+        <View style={styles.volumeControl}>
+          <Icon name="volume" size={15} color={COLORS.muted} />
+          <Pressable
+            accessibilityRole="adjustable"
+            accessibilityLabel="Âm lượng nhạc"
+            accessibilityValue={{
+              min: 0,
+              max: 100,
+              now: Math.round(volume * 100),
+            }}
+            ref={volumeTrackRef}
+            onLayout={handleVolumeLayout}
+            onPress={handleVolumePress}
+            style={styles.volumeTrack}
+          >
+            <View style={[styles.volumeFill, { width: `${volume * 100}%` }]} />
+            <View style={[styles.volumeThumb, { left: `${volume * 100}%` }]} />
+          </Pressable>
+          <Text style={styles.volumeText}>{Math.round(volume * 100)}%</Text>
+        </View>
       </View>
 
-      {!historyEnabled && <View>
-        <Pressable disabled={guestSessionLoading} onPress={() => { void startGuestSession(); }} accessibilityRole="button">
-          <Text style={styles.stageText}>{guestSessionLoading ? 'Đang tạo phiên khách…' : 'Dùng chế độ khách để lưu lịch sử nghe'}</Text>
-        </Pressable>
-        {guestSessionError && <Text accessibilityRole="alert" style={styles.errorText}>{guestSessionError}</Text>}
-      </View>}
-      {historyEnabled && historyError && <View>
-        <Text accessibilityRole="alert" style={styles.errorText}>{historyError}</Text>
-        <Pressable onPress={() => { void retryHistory(); }}>
-          <Text style={styles.stageText}>Thử lưu lại</Text>
-        </Pressable>
-      </View>}
+      {!historyEnabled && (
+        <View>
+          <Pressable
+            disabled={guestSessionLoading}
+            onPress={() => void startGuestSession()}
+            accessibilityRole="button"
+          >
+            <Text style={styles.stageText}>
+              {guestSessionLoading ? 'Đang tạo phiên khách…' : 'Dùng chế độ khách để lưu lịch sử nghe'}
+            </Text>
+          </Pressable>
+          {guestSessionError && (
+            <Text accessibilityRole="alert" style={styles.errorText}>
+              {guestSessionError}
+            </Text>
+          )}
+        </View>
+      )}
+      {historyEnabled && historyError && (
+        <View>
+          <Text accessibilityRole="alert" style={styles.errorText}>
+            {historyError}
+          </Text>
+          <Pressable onPress={() => void retryHistory()}>
+            <Text style={styles.stageText}>Thử lưu lại</Text>
+          </Pressable>
+        </View>
+      )}
       {error ? (
         <Text accessibilityRole="alert" style={styles.errorText}>
           {error}
@@ -317,6 +341,8 @@ const styles = StyleSheet.create({
     borderRadius: 9,
     overflow: 'hidden',
     backgroundColor: COLORS.surface2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   coverImg: {
     width: '100%',
@@ -344,13 +370,18 @@ const styles = StyleSheet.create({
     fontSize: 10,
     marginTop: 1,
   },
-  controls: {
+  centerSection: {
+    flex: 1.5,
+    minWidth: 180,
+    gap: 4,
+  },
+  controlRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
   },
-  controlBtn: {
+  iconBtn: {
     width: 28,
     height: 30,
     alignItems: 'center',
@@ -364,18 +395,37 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  rightSection: {
+    flex: 1,
+    minWidth: 0,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: 8,
+  },
+  finishBtn: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 999,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  finishBtnText: {
+    color: COLORS.text,
+    fontSize: 10,
+    fontWeight: '700',
+  },
+  rightBtn: {
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   stopIcon: {
     width: 11,
     height: 11,
     borderRadius: 2,
     backgroundColor: COLORS.muted,
-  },
-  rightControls: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  expandBtn: {
-    padding: 7,
   },
   progressRow: {
     height: 12,

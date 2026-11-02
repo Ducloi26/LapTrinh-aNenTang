@@ -101,7 +101,11 @@ erDiagram
 | `display_name` | `VARCHAR(100)` | `NOT NULL`, Default: `'Người nghe'` | Tên hiển thị của người dùng trên giao diện |
 
 | `role` | `VARCHAR(20)` | `NOT NULL`, Default: `'user'`, Check: `'user', 'admin'` | Phân quyền tài khoản: `'user'` (Người nghe thông thường) hoặc `'admin'` (Quản trị viên hệ thống) |
+<<<<<<< HEAD
 
+=======
+| `listener_type` | `VARCHAR(30)` | NULL | Hồ sơ định danh âm nhạc được phân loại từ lịch sử nghe 30 ngày gần nhất. |
+>>>>>>> giu-code-push-nham
 | `created_at` | `TIMESTAMPTZ` | Default: `now()` | Thời điểm tạo tài khoản |
 | `updated_at` | `TIMESTAMPTZ` | Default: `now()` | Thời điểm cập nhật gần nhất |
 
@@ -207,6 +211,17 @@ erDiagram
 | `completed` | `BOOLEAN` | Default: `FALSE` | Đã nghe hết bài hay bỏ qua giữa chừng |
 | `listened_at` | `TIMESTAMPTZ` | Default: `now()` | Thời điểm nghe |
 
+> **Yêu cầu cho Music DNA 7.1:** truy vấn tính DNA cần `listening_history.track_id`
+> liên kết tới `tracks.id`, thời lượng nghe trong `listened_seconds` và thời điểm
+> `played_at`. Bảng `tracks` cần có quan hệ `track_features` với các trường
+> `energy`, `valence`, `acousticness`, `instrumentalness`, `bpm`; `binaural` là
+> tùy chọn và `loudness` được dùng thay thế khi không có. Trường `tracks.genre`
+> được dùng để tính tỷ lệ thời gian nghe theo Lo-fi, Ambient, Classical,
+> Synthwave, Acoustic; mọi thể loại khác được gộp vào “Khác”. Các cột hiện mô
+> tả ở bảng này (`track_title`, `duration_listened_sec`, `listened_at`) chưa đủ
+> để thực hiện phép JOIN; cần cập nhật schema/backfill dữ liệu lịch sử trước
+> khi truy vấn có thể trả về Music DNA thực tế.
+
 ---
 
 ### 2.8. Bảng `community_posts` & `community_comments` (Cộng đồng - Mục 10)
@@ -252,6 +267,21 @@ erDiagram
 
 ---
 
+### 2.10. Bảng `user_dna_preferences` (Tùy chỉnh Music DNA - Mục 7.3)
+*Lưu sở thích cá nhân dùng để điều chỉnh điểm mục tiêu khi tạo hành trình mới.*
+
+| Tên cột | Kiểu dữ liệu | Ràng buộc | Mô tả |
+| :--- | :--- | :--- | :--- |
+| `user_id` | `UUID` | `PRIMARY KEY`, `REFERENCES app_users(id) ON DELETE CASCADE` | Chủ sở hữu tùy chỉnh |
+| `energy_offset` | `SMALLINT` | Default: `0`, Check: `-20..20` | Điểm cộng/trừ vào năng lượng mục tiêu |
+| `tempo_offset` | `SMALLINT` | Default: `0`, Check: `-20..20` | BPM cộng/trừ vào nhịp độ mục tiêu |
+| `vocal_preference` | `SMALLINT` | Default: `50`, Check: `0..100` | Ưu tiên nhạc không lời (0) đến có lời (100) |
+| `updated_at` | `TIMESTAMPTZ` | Default: `now()` | Thời điểm lưu gần nhất |
+
+Chạy file `supabase/music_dna_preferences.sql` để tạo bảng. Backend cần
+`SUPABASE_SERVICE_ROLE_KEY` trong `.env` để truy cập bảng an toàn; không đưa
+khóa này vào frontend.
+
 ## 📂 3. CÁC TẬP TIN SQL ĐÃ TẠO SẴN TRONG THƯ MỤC `supabase/`
 
 Bạn có thể chạy trực tiếp các tập tin này trong **Supabase Dashboard -> SQL Editor**:
@@ -262,3 +292,7 @@ Bạn có thể chạy trực tiếp các tập tin này trong **Supabase Dashbo
    Tạo và nạp toàn bộ dữ liệu mẫu chuẩn cho 8 Moods và 4 Activities (kèm giới hạn BPM và `allow_vocal`).
 3. [supabase/create_journey_tables.sql](supabase/create_journey_tables.sql):  
    Tạo 3 bảng lưu trữ Hành trình khoa học: `journeys`, `journey_tracks` và `user_favorites`.
+4. [supabase/music_dna_preferences.sql](supabase/music_dna_preferences.sql):
+   Tạo bảng lưu tùy chỉnh Music DNA cho từng người dùng.
+5. [supabase/music_dna_listener_type.sql](supabase/music_dna_listener_type.sql):
+   Thêm loại hồ sơ định danh âm nhạc vào `app_users`.
