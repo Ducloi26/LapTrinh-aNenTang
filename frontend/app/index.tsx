@@ -1,5 +1,5 @@
 import { COLORS, moodById, Track, TRACK_POOL } from "@/constants/moodflow";
-import { PlayerQueueEntry } from "@/contexts/PlayerContext";
+import { PlayerQueueEntry, usePlayer } from "@/contexts/PlayerContext";
 import { supabase } from "@/lib/supabase";
 import { AIParsedResult } from "@/services/ai-prompt-parser";
 import { presetForMoodActivity } from "@/services/audio-presets";
@@ -59,6 +59,24 @@ import {
 import { getCurrentUserProfile } from "@/services/mood-service";
 
 export default function MoodFlowMain() {
+  const {
+    playTrack: selectTrack,
+    togglePlay,
+    stop: stopPlayback,
+    setPreset,
+    playing,
+    nowPlaying,
+    stageInfo,
+    elapsedSeconds,
+    durationSeconds,
+    seekTo,
+    initializeLibrary,
+    nextTrack,
+    previousTrack,
+    queue,
+    currentIndex,
+    queueEndCount,
+  } = usePlayer();
   const [authed, setAuthed] = useState(true);
   const [userName, setUserName] = useState("Người nghe");
   const [userId, setUserId] = useState<string>("guest");
@@ -150,6 +168,8 @@ export default function MoodFlowMain() {
   const [nowPlayingModal, setNowPlayingModal] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStep, setGenerationStep] = useState(0);
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+  const [logoutPending, setLogoutPending] = useState(false);
 
   // App State: Mood selection & generated journey
   const [state, setState] = useState({
@@ -168,33 +188,37 @@ export default function MoodFlowMain() {
     }),
   );
 
-  // Music Playback state
-  const [nowPlaying, setNowPlaying] = useState<Track | null>(
-    () => TRACK_POOL.acknowledge?.[0] || null,
-  );
-  const [stageInfo, setStageInfo] = useState({
-    index: 0,
-    total: 4,
-    title: "Khởi đầu & Thấu cảm",
-  });
-  const [playing, setPlaying] = useState(false);
+  const [trackPool, setTrackPool] = useState<Record<string, Track[]>>(TRACK_POOL);
+  const [libraryTracks, setLibraryTracks] = useState<Track[]>([]);
+  const [catalogError, setCatalogError] = useState<string | null>(null);
+  const [catalogLoading, setCatalogLoading] = useState(true);
 
-  // Cảnh báo người dùng trước khi đóng tab/tắt app khi đang nghe
-  React.useEffect(() => {
-    if (typeof window !== "undefined") {
-      const handleBeforeUnload = (e: any) => {
-        if (playing) {
-          e.preventDefault();
-          e.returnValue =
-            "Bạn có muốn đánh giá phiên trị liệu âm nhạc trước khi rời đi?";
-          return e.returnValue;
+  useEffect(() => {
+    let active = true;
+    loadMusicCatalog()
+      .then((catalog) => {
+        if (!active) return;
+        setTrackPool(catalog.pools);
+        setLibraryTracks(catalog.tracks);
+        initializeLibrary(catalog.tracks);
+      })
+      .catch((reason: unknown) => {
+        if (active) {
+          setCatalogError(
+            reason instanceof Error
+              ? reason.message
+              : "Không tải được thư viện nhạc.",
+          );
         }
-      };
-      window.addEventListener("beforeunload", handleBeforeUnload);
-      return () =>
-        window.removeEventListener("beforeunload", handleBeforeUnload);
-    }
-  }, [playing]);
+      })
+      .finally(() => {
+        if (active) setCatalogLoading(false);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [initializeLibrary]);
 
   const currentMood = moodById(state.moodFrom);
 
@@ -235,12 +259,15 @@ export default function MoodFlowMain() {
         setGenerationStep((prev) => {
           if (prev < 4) return prev + 1;
           clearInterval(interval);
-          setTimeout(() => {
+          setTimeout(async () => {
+            const from = moodById(activeState.moodFrom);
+            const to = moodById(activeState.moodTo);
             const j = generateJourney({
-              moodFrom: moodById(activeState.moodFrom),
-              moodTo: moodById(activeState.moodTo),
+              moodFrom: from,
+              moodTo: to,
               activity: activeState.activity,
               duration: activeState.duration,
+              trackPool,
               preferences: dnaPreferences,
             });
             setJourney(j);
@@ -252,14 +279,25 @@ export default function MoodFlowMain() {
             setPage("journey");
             const first = j.stages[0]?.tracks[0];
             if (first) {
-              setNowPlaying(first);
-              setStageInfo({
-                index: 0,
-                total: j.stages.length,
-                title: j.stages[0].title,
-              });
-              setPlaying(true);
-              audioSynth.play();
+              const entries: PlayerQueueEntry[] = j.stages.flatMap(
+                (stage, index) =>
+                  stage.tracks.map((track) => ({
+                    track,
+                    stageInfo: {
+                      index,
+                      total: j.stages.length,
+                      title: stage.title,
+                    },
+                    historyContext: {
+                      journeyId: j.id ?? null,
+                      moodId: index === 0 ? j.moodFromId : j.moodToId,
+                      stage: stage.key,
+                    },
+                  })),
+              );
+              if (entries[0]) {
+                selectTrack(entries[0].track, entries[0].stageInfo, entries, 0);
+              }
             }
 
             // TỰ ĐỘNG LƯU VÀO CSDL BACKEND KHI TẠO HÀNH TRÌNH (GẮN VỚI USER ID)
@@ -315,6 +353,7 @@ export default function MoodFlowMain() {
       catalogError,
       userId,
       userName,
+      dnaPreferences,
     ],
   );
 
@@ -533,29 +572,6 @@ export default function MoodFlowMain() {
     dnaPreferencesLoadError,
   ]);
 
-  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
-  const [logoutPending, setLogoutPending] = useState(false);
-
-  const performActualLogout = async () => {
-    if (typeof localStorage !== "undefined") {
-      localStorage.removeItem("moodflow_token");
-      localStorage.removeItem("moodflow_user");
-    }
-    try {
-      await supabase.auth.signOut();
-    } catch (e) {}
-    audioSynth.pause();
-    setPlaying(false);
-    setAuthed(false);
-    setLogoutPending(false);
-  };
-
-  const handleLogout = () => {
-    // Khi người dùng bấm đăng xuất hoặc tắt app: Bật Pop-up đánh giá cảm xúc & lưu CSDL
-    setLogoutPending(true);
-    setFeedbackModalOpen(true);
-  };
-
   // If user is not logged in, render AuthScreen
   if (!authed) {
     return (
@@ -670,13 +686,10 @@ export default function MoodFlowMain() {
 
       {/* Persistent Bottom Music Player */}
       <BottomPlayer
-        nowPlaying={nowPlaying}
-        playing={playing}
-        setPlaying={handleTogglePlay}
-        stageInfo={stageInfo}
+        bottomOffset={isDesktop ? 0 : 60}
         onOpenNowPlaying={() => setNowPlayingModal(true)}
         onNext={handleNextTrack}
-        onPrev={handlePrevTrack}
+        onPrev={previousTrack}
         onFinishJourney={() => setFeedbackModalOpen(true)}
       />
 

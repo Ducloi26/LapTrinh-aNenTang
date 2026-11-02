@@ -37,12 +37,16 @@ npm run web -- --clear
 4. Bấm thanh tiến trình để tua; âm thanh và số giây cùng thay đổi. Thời lượng hiển thị lấy từ file, không lấy bộ đếm giả.
 5. Đổi âm lượng: cả hai lớp cùng thay đổi. Binaural đặt ở **12% mức âm lượng nhạc**; dùng tai nghe stereo để nghe khác biệt hai kênh.
 6. Chuyển Deep Work / Relax / Sleep: bài hát không tải lại, lớp Binaural đổi theo preset.
-7. Tua bài đầu tới gần cuối, chờ kết thúc: tự chuyển sang bài thứ hai. Cuối hàng đợi sẽ dừng; bấm ▶ để nghe lại bài cuối. Nút bài tiếp/bài trước có thể quay vòng thư viện. Trong hành trình, đi hết bài cuối sẽ mở đánh giá phiên theo chức năng từ main.
-8. Tạo hành trình và bấm một bài trong từng giai đoạn: phát đúng bài và cập nhật thông tin giai đoạn khi tự chuyển bài.
-9. Chuyển bài nhanh, bấm dừng trong lúc tải, rồi phát lại: bài cũ không được tự phát trở lại.
-10. Kiểm tra lỗi bằng bản ghi có URL mẫu/hỏng: hiện lỗi, không chạy tiến độ giả. Khôi phục URL đúng, tải lại thư viện rồi thử lại.
+7. Mở **Cài đặt → Tần số tham chiếu**, chọn 432 Hz hoặc 440 Hz rồi phát lại synth. Binaural phải giữ đúng độ lệch của preset; hợp âm nền đổi mỗi 8 giây và chuyển mượt.
+8. Thử các hoạt động Thiền định, Giấc ngủ và Tập luyện để lần lượt chọn Theta (6 Hz), Delta (2 Hz) và Gamma (35 Hz). Thư giãn/sáng tạo dùng Alpha (10 Hz), Deep Work dùng Beta (20 Hz).
+9. Tua bài đầu tới gần cuối, chờ kết thúc: tự chuyển sang bài thứ hai. Cuối hàng đợi sẽ dừng; bấm ▶ để nghe lại bài cuối. Nút bài tiếp/bài trước có thể quay vòng thư viện. Trong hành trình, đi hết bài cuối sẽ mở đánh giá phiên theo chức năng từ main.
+10. Tạo hành trình và bấm một bài trong từng giai đoạn: phát đúng bài và cập nhật thông tin giai đoạn khi tự chuyển bài.
+11. Chuyển bài nhanh, bấm dừng trong lúc tải, rồi phát lại: bài cũ không được tự phát trở lại.
+12. Kiểm tra lỗi bằng bản ghi có URL mẫu/hỏng: hiện lỗi, không chạy tiến độ giả. Khôi phục URL đúng, tải lại thư viện rồi thử lại.
 
 Trình duyệt có thể chặn tự phát sau hiệu ứng tạo hành trình. Khi đó bấm ▶ trực tiếp để cấp quyền phát.
+
+Web Audio Synth dùng Web Audio API trên trình duyệt. Trên mobile, không hỗ trợ hai oscillator stereo tùy chỉnh; chỉ phát lớp binaural đóng gói có sẵn cho preset Deep Work, Relax và Sleep, các preset Theta/Gamma sẽ bỏ qua lớp binaural.
 
 ## Test Android / iOS và khóa màn hình
 

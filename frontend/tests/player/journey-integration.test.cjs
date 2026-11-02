@@ -64,6 +64,6 @@ test('saved journey keeps its selected songs and identity while restoring real a
 test('new mood and activity IDs select the appropriate binaural layer', () => {
   assert.equal(presetForMoodActivity('deep_focus', 'deep_work'), 'deep-work');
   assert.equal(presetForMoodActivity('calm_unwind', 'deep_work'), 'relax');
-  assert.equal(presetForMoodActivity('deep_focus', 'meditation'), 'relax');
+  assert.equal(presetForMoodActivity('deep_focus', 'meditation'), 'meditation');
   assert.equal(presetForMoodActivity('deep_focus', 'sleep'), 'sleep');
 });

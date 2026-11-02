@@ -1,14 +1,15 @@
 import { Platform } from 'react-native';
-import {
-  SYNTH_PRESETS,
-  SynthPresetId,
-} from '@/services/audio-presets';
+import { SYNTH_PRESETS } from '@/services/audio-presets';
+import type { SynthPresetId } from '@/services/audio-presets';
 
+export type ReferenceTuning = 432 | 440;
+
+const TUNING_STORAGE_KEY = 'moodflow_reference_tuning';
 const MIN_VOLUME = 0;
 const MAX_VOLUME = 1;
-const MASTER_FADE_SECONDS = 0.18;
-const VOICE_FADE_SECONDS = 1.4;
-const PRESET_FADE_SECONDS = 1.8;
+const FADE_IN_SECONDS = 2;
+const FADE_OUT_SECONDS = 1;
+const CHORD_CROSSFADE_SECONDS = 2;
 const CHORD_SWAP_SECONDS = 8;
 const BINAURAL_GAIN = 0.12;
 const AMBIENT_GAIN = 0.03;
@@ -17,6 +18,28 @@ interface ToneVoice {
   oscillator: OscillatorNode;
   gain: GainNode;
   panner: StereoPannerNode;
+  frequency: number;
+}
+
+type ChordProgression = readonly (readonly number[])[];
+
+function readReferenceTuning(): ReferenceTuning {
+  if (typeof window === 'undefined') return 440;
+  try {
+    return window.localStorage.getItem(TUNING_STORAGE_KEY) === '432' ? 432 : 440;
+  } catch (error) {
+    console.warn('Không đọc được cài đặt tần số tham chiếu.', error);
+    return 440;
+  }
+}
+
+function makeChordProgression(rootFrequency: number, mode: 'major' | 'minor') {
+  const intervals = mode === 'major'
+    ? [[0, 4, 7], [5, 9, 12], [7, 11, 14], [9, 12, 16]]
+    : [[0, 3, 7], [5, 8, 12], [7, 10, 14], [8, 12, 15]];
+  return intervals.map((chord) =>
+    chord.map((semitones) => rootFrequency * 2 ** (semitones / 12)),
+  );
 }
 
 class WebAudioSynth {
@@ -27,17 +50,27 @@ class WebAudioSynth {
   private voices = new Set<ToneVoice>();
   private presetId: SynthPresetId = 'deep-work';
   private volume = 0.55;
+  private referenceTuning = readReferenceTuning();
+  private binauralBaseFrequency = SYNTH_PRESETS[this.presetId].baseFrequency;
+  private beatHz = SYNTH_PRESETS[this.presetId].beatDifference;
+  private ambientProgression: ChordProgression =
+    SYNTH_PRESETS[this.presetId].ambientChordProgression;
   private operationQueue: Promise<void> = Promise.resolve();
   private chordTimer: ReturnType<typeof setTimeout> | null = null;
   private ambientIndex = 0;
 
   get isSupported() {
-    return Platform.OS === 'web' && typeof window !== 'undefined' &&
+    return Platform.OS === 'web' &&
+      typeof window !== 'undefined' &&
       typeof window.AudioContext !== 'undefined';
   }
 
   get selectedPreset() {
     return this.presetId;
+  }
+
+  get selectedReferenceTuning() {
+    return this.referenceTuning;
   }
 
   get isPlaying() {
@@ -47,23 +80,52 @@ class WebAudioSynth {
   async play(presetId: SynthPresetId = this.presetId) {
     return this.enqueue(async () => {
       this.assertSupported();
-      if (presetId !== this.presetId) {
-        await this.setPresetNow(presetId);
+      if (!SYNTH_PRESETS[presetId]) {
+        throw new Error(`Không tìm thấy preset âm thanh: ${presetId}`);
       }
-      if (this.context?.state === 'closed') {
-        this.context = null;
-        this.masterGain = null;
-        this.binauralVoices = [];
-        this.ambientVoices = [];
-        this.voices.clear();
+      const presetChanged = this.configurePreset(presetId);
+      this.ensureGraph();
+
+      if (this.binauralVoices.length === 0) {
+        this.createBinauralVoices(this.binauralBaseFrequency, this.beatHz);
+      } else if (presetChanged) {
+        this.updateBinauralFrequencies(CHORD_CROSSFADE_SECONDS);
       }
-      if (!this.context) {
-        this.createGraph();
+      if (this.ambientVoices.length === 0 || presetChanged) {
+        this.crossfadeAmbientChord(CHORD_CROSSFADE_SECONDS);
       }
-      if (this.context?.state !== 'running') {
-        await this.context?.resume();
+
+      await this.resumeAndFadeIn();
+      this.startChordCycle();
+    });
+  }
+
+  async playBinaural(baseFreq: number, beatHz: number) {
+    this.validateFrequency(baseFreq, 'Tần số nền');
+    this.validateFrequency(beatHz, 'Tần số nhịp');
+    return this.enqueue(async () => {
+      this.assertSupported();
+      this.binauralBaseFrequency = baseFreq;
+      this.beatHz = beatHz;
+      this.ensureGraph();
+      if (this.binauralVoices.length === 0) {
+        this.createBinauralVoices(baseFreq, beatHz);
+      } else {
+        this.updateBinauralFrequencies(CHORD_CROSSFADE_SECONDS);
       }
-      this.applyVolume(this.volume, true);
+      await this.resumeAndFadeIn();
+    });
+  }
+
+  async playAmbientChords(rootFreq: number, mode: 'major' | 'minor') {
+    this.validateFrequency(rootFreq, 'Tần số gốc hợp âm');
+    return this.enqueue(async () => {
+      this.assertSupported();
+      this.ambientProgression = makeChordProgression(rootFreq, mode);
+      this.ambientIndex = 0;
+      this.ensureGraph();
+      this.crossfadeAmbientChord(CHORD_CROSSFADE_SECONDS);
+      await this.resumeAndFadeIn();
       this.startChordCycle();
     });
   }
@@ -71,8 +133,8 @@ class WebAudioSynth {
   async pause() {
     return this.enqueue(async () => {
       if (this.context?.state === 'running') {
-        this.applyMasterGain(0, MASTER_FADE_SECONDS);
-        await this.wait(MASTER_FADE_SECONDS * 1000);
+        this.applyMasterGain(0, FADE_OUT_SECONDS);
+        await this.wait(FADE_OUT_SECONDS * 1000);
         if (this.context?.state === 'running') {
           await this.context.suspend();
         }
@@ -86,31 +148,84 @@ class WebAudioSynth {
   }
 
   async setPreset(presetId: SynthPresetId) {
-    return this.enqueue(() => this.setPresetNow(presetId));
+    return this.enqueue(() => {
+      if (!this.configurePreset(presetId)) return;
+      if (!this.context || this.context.state === 'closed') return;
+      this.updateBinauralFrequencies(CHORD_CROSSFADE_SECONDS);
+      this.crossfadeAmbientChord(CHORD_CROSSFADE_SECONDS);
+      if (this.context.state === 'running') this.startChordCycle();
+    });
+  }
+
+  async setReferenceTuning(tuning: ReferenceTuning) {
+    if (tuning !== 432 && tuning !== 440) {
+      throw new Error('Tần số tham chiếu chỉ được là 432 Hz hoặc 440 Hz.');
+    }
+
+    return this.enqueue(async () => {
+      try {
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(TUNING_STORAGE_KEY, String(tuning));
+        }
+      } catch (error) {
+        console.error('Không lưu được cài đặt tần số tham chiếu.', error);
+        throw new Error('Không lưu được cài đặt tần số tham chiếu.');
+      }
+
+      this.referenceTuning = tuning;
+      this.updateBinauralFrequencies(CHORD_CROSSFADE_SECONDS);
+      this.ambientVoices.forEach((voice) => {
+        this.rampFrequency(voice, voice.frequency * this.tuningRatio());
+      });
+    });
   }
 
   setVolume(volume: number) {
     if (!Number.isFinite(volume)) return;
     this.volume = Math.max(MIN_VOLUME, Math.min(MAX_VOLUME, volume));
-    this.applyVolume(this.volume, false);
+    this.applyVolume(this.volume);
   }
 
-  private enqueue(operation: () => Promise<void>) {
+  private enqueue(operation: () => Promise<void> | void) {
     const result = this.operationQueue.then(operation, operation);
     this.operationQueue = result.catch(() => undefined);
     return result;
   }
 
+  private setPresetConfiguration(presetId: SynthPresetId) {
+    const preset = SYNTH_PRESETS[presetId];
+    if (!preset) throw new Error(`Không tìm thấy preset âm thanh: ${presetId}`);
+    this.presetId = presetId;
+    this.binauralBaseFrequency = preset.baseFrequency;
+    this.beatHz = preset.beatDifference;
+    this.ambientProgression = preset.ambientChordProgression;
+    this.ambientIndex = 0;
+  }
+
+  private configurePreset(presetId: SynthPresetId) {
+    const preset = SYNTH_PRESETS[presetId];
+    if (!preset) throw new Error(`Không tìm thấy preset âm thanh: ${presetId}`);
+    const changed = this.presetId !== presetId ||
+      this.binauralBaseFrequency !== preset.baseFrequency ||
+      this.beatHz !== preset.beatDifference ||
+      this.ambientProgression !== preset.ambientChordProgression;
+    if (changed) this.setPresetConfiguration(presetId);
+    return changed;
+  }
+
+  private async resumeAndFadeIn() {
+    if (this.context?.state !== 'running') await this.context?.resume();
+    this.applyVolume(this.volume, FADE_IN_SECONDS);
+  }
+
   private async stopNow() {
     const context = this.context;
-
     this.stopChordCycle();
-
     if (!context) return;
 
     if (context.state === 'running') {
-      this.applyMasterGain(0, MASTER_FADE_SECONDS);
-      await this.wait(MASTER_FADE_SECONDS * 1000);
+      this.applyMasterGain(0, FADE_OUT_SECONDS);
+      await this.wait(FADE_OUT_SECONDS * 1000);
     }
 
     this.context = null;
@@ -122,88 +237,59 @@ class WebAudioSynth {
       try {
         oscillator.stop();
       } catch {
-        // oscillator may already be stopped; this is safe to ignore
+        // The oscillator may already have stopped.
       }
       oscillator.disconnect();
       gain.disconnect();
       panner.disconnect();
     });
     this.voices.clear();
-
     await context.close();
   }
 
-  private async setPresetNow(presetId: SynthPresetId) {
-    if (this.presetId === presetId) return;
+  private assertSupported() {
+    if (!this.isSupported) {
+      throw new Error('Web Audio Synth hiện chỉ hỗ trợ trên trình duyệt có Web Audio API.');
+    }
+  }
 
-    this.presetId = presetId;
-    const context = this.context;
-    if (!context) return;
-    if (context.state === 'closed') {
+  private ensureGraph() {
+    if (this.context?.state === 'closed') {
       this.context = null;
       this.masterGain = null;
       this.binauralVoices = [];
       this.ambientVoices = [];
       this.voices.clear();
-      return;
     }
+    if (this.context) return;
 
-    const preset = SYNTH_PRESETS[presetId];
-    const now = context.currentTime;
-    this.ambientIndex = 0;
-
-    const binauralFrequencies = [
-      preset.baseFrequency,
-      preset.baseFrequency + preset.beatDifference,
-    ];
-    this.binauralVoices.forEach(({ oscillator }, index) => {
-      const frequency = oscillator.frequency;
-      frequency.cancelAndHoldAtTime(now);
-      frequency.setTargetAtTime(
-        binauralFrequencies[index],
-        now,
-        PRESET_FADE_SECONDS / 3,
-      );
-    });
-    this.crossfadeAmbientChord(context, preset, PRESET_FADE_SECONDS);
-
-    if (context.state === 'running') {
-      this.startChordCycle();
-    }
-  }
-
-  private assertSupported() {
-    if (Platform.OS !== 'web') {
-      throw new Error('Web Audio Synth hiện chỉ hỗ trợ trên trình duyệt.');
-    }
-    if (typeof window === 'undefined' || typeof window.AudioContext === 'undefined') {
-      throw new Error('Trình duyệt này không hỗ trợ Web Audio API.');
-    }
-  }
-
-  private createGraph() {
-    this.assertSupported();
     const context = new window.AudioContext();
-    const preset = SYNTH_PRESETS[this.presetId];
     const masterGain = context.createGain();
-    const binauralVoices: ToneVoice[] = [];
-    const ambientVoices: ToneVoice[] = [];
-
     masterGain.gain.value = 0;
     masterGain.connect(context.destination);
-
-    const leftTone = this.createTone(context, masterGain, preset.baseFrequency, -1, BINAURAL_GAIN);
-    const rightTone = this.createTone(context, masterGain, preset.baseFrequency + preset.beatDifference, 1, BINAURAL_GAIN);
-
-    binauralVoices.push(leftTone, rightTone);
-
-    ambientVoices.push(...this.createAmbientChord(context, masterGain, preset, AMBIENT_GAIN));
-    this.ambientIndex = 1 % preset.ambientChordProgression.length;
-
     this.context = context;
     this.masterGain = masterGain;
-    this.binauralVoices = binauralVoices;
-    this.ambientVoices = ambientVoices;
+  }
+
+  private createBinauralVoices(baseFrequency: number, beatHz: number) {
+    if (!this.context || !this.masterGain) return;
+    this.binauralVoices = [
+      this.createTone(
+        this.context,
+        this.masterGain,
+        baseFrequency,
+        -1,
+        BINAURAL_GAIN,
+      ),
+      this.createTone(
+        this.context,
+        this.masterGain,
+        baseFrequency + beatHz,
+        1,
+        BINAURAL_GAIN,
+        baseFrequency * this.tuningRatio() + beatHz,
+      ),
+    ];
   }
 
   private createTone(
@@ -212,21 +298,20 @@ class WebAudioSynth {
     frequency: number,
     pan: number,
     gainValue: number,
-    initialGain = gainValue,
+    actualFrequency = frequency * this.tuningRatio(),
   ): ToneVoice {
     const oscillator = context.createOscillator();
     const gain = context.createGain();
     const panner = context.createStereoPanner();
-
     oscillator.type = 'sine';
-    oscillator.frequency.value = frequency;
-    gain.gain.value = initialGain;
+    oscillator.frequency.value = actualFrequency;
+    gain.gain.value = gainValue;
     panner.pan.value = pan;
 
     oscillator.connect(gain);
     gain.connect(panner);
     panner.connect(destination);
-    const voice = { oscillator, gain, panner };
+    const voice = { oscillator, gain, panner, frequency };
     this.voices.add(voice);
     oscillator.addEventListener('ended', () => {
       oscillator.disconnect();
@@ -235,54 +320,44 @@ class WebAudioSynth {
       this.voices.delete(voice);
     }, { once: true });
     oscillator.start();
-
     return voice;
   }
 
-  private createAmbientChord(
-    context: AudioContext,
-    destination: GainNode,
-    preset: (typeof SYNTH_PRESETS)[SynthPresetId],
-    initialGain: number,
-  ): ToneVoice[] {
-    const chord = preset.ambientChordProgression[this.ambientIndex % preset.ambientChordProgression.length];
-    return chord.map((frequency) =>
-      this.createTone(context, destination, frequency, 0, AMBIENT_GAIN, initialGain),
-    );
-  }
+  private crossfadeAmbientChord(fadeSeconds: number) {
+    if (!this.context || !this.masterGain || this.ambientProgression.length === 0) return;
 
-  private crossfadeAmbientChord(
-    context: AudioContext,
-    preset: (typeof SYNTH_PRESETS)[SynthPresetId],
-    fadeSeconds: number,
-  ) {
-    if (!this.masterGain) return;
-
-    const now = context.currentTime;
+    const chord = this.ambientProgression[
+      this.ambientIndex % this.ambientProgression.length
+    ];
     const previousVoices = this.ambientVoices;
-    const nextVoices = this.createAmbientChord(context, this.masterGain, preset, 0);
+    const nextVoices = chord.map((frequency) =>
+      this.createTone(
+        this.context!,
+        this.masterGain!,
+        frequency,
+        0,
+        0,
+      ),
+    );
+    const now = this.context.currentTime;
     nextVoices.forEach(({ gain }) => {
       gain.gain.setValueAtTime(0, now);
       gain.gain.linearRampToValueAtTime(AMBIENT_GAIN, now + fadeSeconds);
     });
     this.releaseVoices(previousVoices, fadeSeconds);
     this.ambientVoices = nextVoices;
-    this.ambientIndex = (this.ambientIndex + 1) % preset.ambientChordProgression.length;
+    this.ambientIndex = (this.ambientIndex + 1) % this.ambientProgression.length;
   }
 
   private startChordCycle() {
     this.stopChordCycle();
     const context = this.context;
-    if (!context || !this.masterGain || context.state !== 'running') return;
+    if (!context || context.state !== 'running' || this.ambientProgression.length === 0) return;
 
     this.chordTimer = setTimeout(() => {
       this.chordTimer = null;
       if (this.context !== context || context.state !== 'running') return;
-      this.crossfadeAmbientChord(
-        context,
-        SYNTH_PRESETS[this.presetId],
-        VOICE_FADE_SECONDS,
-      );
+      this.crossfadeAmbientChord(CHORD_CROSSFADE_SECONDS);
       this.startChordCycle();
     }, CHORD_SWAP_SECONDS * 1000);
   }
@@ -294,43 +369,61 @@ class WebAudioSynth {
     }
   }
 
-  private applyVolume(volume: number, fadeIn: boolean) {
-    if (!this.context || !this.masterGain) return;
-
-    this.applyMasterGain(
-      volume,
-      fadeIn ? MASTER_FADE_SECONDS : MASTER_FADE_SECONDS / 3,
-    );
+  private applyVolume(volume: number, duration = FADE_OUT_SECONDS / 3) {
+    this.applyMasterGain(volume, duration);
   }
 
-  private applyMasterGain(
-    volume: number,
-    duration: number,
-  ) {
+  private applyMasterGain(volume: number, duration: number) {
     if (!this.context || !this.masterGain) return;
-
     const now = this.context.currentTime;
     const gain = this.masterGain.gain;
     gain.cancelAndHoldAtTime(now);
     gain.linearRampToValueAtTime(volume, now + duration);
   }
 
-  private releaseVoices(voices: ToneVoice[], fadeSeconds: number) {
-    const context = this.context;
-    if (!context) return;
+  private updateBinauralFrequencies(duration: number) {
+    const tunedBase = this.binauralBaseFrequency * this.tuningRatio();
+    const frequencies = [tunedBase, tunedBase + this.beatHz];
+    this.binauralVoices.forEach((voice, index) => {
+      this.rampFrequency(voice, frequencies[index], duration);
+    });
+  }
 
-    const now = context.currentTime;
+  private rampFrequency(
+    voice: ToneVoice,
+    frequency: number,
+    duration = CHORD_CROSSFADE_SECONDS,
+  ) {
+    if (!this.context) return;
+    const parameter = voice.oscillator.frequency;
+    const now = this.context.currentTime;
+    parameter.cancelAndHoldAtTime(now);
+    parameter.linearRampToValueAtTime(frequency, now + duration);
+  }
+
+  private releaseVoices(voices: ToneVoice[], fadeSeconds: number) {
+    if (!this.context) return;
+    const now = this.context.currentTime;
     const stopAt = now + fadeSeconds;
     voices.forEach(({ oscillator, gain }) => {
-      const gainParam = gain.gain;
-      gainParam.cancelAndHoldAtTime(now);
-      gainParam.linearRampToValueAtTime(0, stopAt);
+      gain.gain.cancelAndHoldAtTime(now);
+      gain.gain.linearRampToValueAtTime(0, stopAt);
       try {
         oscillator.stop(stopAt);
       } catch {
         // The oscillator may already have a scheduled stop.
       }
     });
+  }
+
+  private tuningRatio() {
+    return this.referenceTuning / 440;
+  }
+
+  private validateFrequency(value: number, label: string) {
+    if (!Number.isFinite(value) || value <= 0) {
+      throw new Error(`${label} phải là số lớn hơn 0.`);
+    }
   }
 
   private wait(milliseconds: number) {

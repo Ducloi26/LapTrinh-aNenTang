@@ -5,6 +5,7 @@ import {
   Pressable,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from 'react-native';
 import { COLORS } from '@/constants/moodflow';
@@ -57,6 +58,8 @@ export default function BottomPlayer({
     previousTrack,
     nextTrack,
   } = usePlayer();
+  const { width } = useWindowDimensions();
+  const isMobile = width < 768;
   const progressRef = React.useRef<View>(null);
   const volumeTrackRef = React.useRef<View>(null);
   const [progressWidth, setProgressWidth] = React.useState(1);
@@ -134,6 +137,11 @@ export default function BottomPlayer({
             <Text style={styles.trackArtist} numberOfLines={1}>
               {nowPlaying.artist} · BPM {nowPlaying.bpm ?? '—'}
             </Text>
+            {stageInfo && (
+              <Text style={styles.stageText} numberOfLines={1}>
+                Giai đoạn {stageInfo.index + 1}/{stageInfo.total} · {stageInfo.title}
+              </Text>
+            )}
           </View>
         </Pressable>
 
@@ -201,11 +209,6 @@ export default function BottomPlayer({
               <Text style={styles.finishBtnText}>🏁 Đánh giá</Text>
             </Pressable>
           )}
-          {stageInfo && (
-            <Text style={styles.stageText} numberOfLines={1}>
-              Giai đoạn {stageInfo.index + 1}/{stageInfo.total} · {stageInfo.title}
-            </Text>
-          )}
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Dừng phát"
@@ -247,26 +250,28 @@ export default function BottomPlayer({
           })}
         </View>
 
-        <View style={styles.volumeControl}>
-          <Icon name="volume" size={15} color={COLORS.muted} />
-          <Pressable
-            accessibilityRole="adjustable"
-            accessibilityLabel="Âm lượng nhạc"
-            accessibilityValue={{
-              min: 0,
-              max: 100,
-              now: Math.round(volume * 100),
-            }}
-            ref={volumeTrackRef}
-            onLayout={handleVolumeLayout}
-            onPress={handleVolumePress}
-            style={styles.volumeTrack}
-          >
-            <View style={[styles.volumeFill, { width: `${volume * 100}%` }]} />
-            <View style={[styles.volumeThumb, { left: `${volume * 100}%` }]} />
-          </Pressable>
-          <Text style={styles.volumeText}>{Math.round(volume * 100)}%</Text>
-        </View>
+        {!isMobile && (
+          <View style={styles.volumeControl}>
+            <Icon name="volume" size={15} color={COLORS.muted} />
+            <Pressable
+              accessibilityRole="adjustable"
+              accessibilityLabel="Âm lượng nhạc"
+              accessibilityValue={{
+                min: 0,
+                max: 100,
+                now: Math.round(volume * 100),
+              }}
+              ref={volumeTrackRef}
+              onLayout={handleVolumeLayout}
+              onPress={handleVolumePress}
+              style={styles.volumeTrack}
+            >
+              <View style={[styles.volumeFill, { width: `${volume * 100}%` }]} />
+              <View style={[styles.volumeThumb, { left: `${volume * 100}%` }]} />
+            </Pressable>
+            <Text style={styles.volumeText}>{Math.round(volume * 100)}%</Text>
+          </View>
+        )}
       </View>
 
       {!historyEnabled && (

@@ -75,20 +75,22 @@ export function generateJourney(params: {
   moodTo: Mood;
   activity: string;
   duration: number;
-<<<<<<< HEAD
   trackPool?: Record<string, Track[]>;
-}): Journey {
-  const { moodFrom, moodTo, activity, duration, trackPool = TRACK_POOL } = params;
-=======
   preferences?: DNARecommendationPreferences;
 }): Journey {
-  const { moodFrom, moodTo, activity, duration, preferences } = params;
+  const {
+    moodFrom,
+    moodTo,
+    activity,
+    duration,
+    trackPool = TRACK_POOL,
+    preferences,
+  } = params;
   const hasCustomizedPreferences =
     preferences !== undefined &&
     (preferences.energyOffset !== 0 ||
       preferences.tempoOffset !== 0 ||
       preferences.vocalPreference !== 50);
->>>>>>> giu-code-push-nham
   let t = 0;
 
   const stages: Stage[] = JOURNEY_4_STAGES.map((tpl, i) => {

@@ -6,7 +6,7 @@ import { resolveTrackSource } from './track-source';
 import type { ListeningContext, ListeningEndReason, ListeningHistoryTracker } from './listening-history-tracker';
 
 // Bundled stereo loops also work on native, where Web Audio oscillators are unavailable.
-const BINAURAL_SOURCES: Record<SynthPresetId, number> = {
+const BINAURAL_SOURCES: Partial<Record<SynthPresetId, number>> = {
   'deep-work': require('../assets/audio/binaural-deep-work.wav'),
   relax: require('../assets/audio/binaural-relax.wav'),
   sleep: require('../assets/audio/binaural-sleep.wav'),
@@ -187,8 +187,10 @@ export class PlayerService {
 
   private async startBinaural() {
     const generation = this.mixGeneration;
+    const source = BINAURAL_SOURCES[this.preset];
+    if (!source) return;
     if (!this.binaural) {
-      this.binaural = createAudioEngine(BINAURAL_SOURCES[this.preset], {
+      this.binaural = createAudioEngine(source, {
         onProgress: () => {}, onEnd: () => {},
         onError: (error) => console.warn('Không tải được lớp Binaural', error),
       }, { loop: true });

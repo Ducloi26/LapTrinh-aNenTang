@@ -1,4 +1,4 @@
-export type SynthPresetId = 'deep-work' | 'relax' | 'sleep';
+export type SynthPresetId = 'deep-work' | 'relax' | 'sleep' | 'meditation' | 'energy';
 
 export type BrainwaveBand = 'Delta' | 'Theta' | 'Alpha' | 'Beta' | 'Gamma';
 
@@ -10,8 +10,23 @@ export interface SynthPreset {
   deltaHz: number;
   baseFrequency: number;
   beatDifference: number;
-  ambientChordProgression: readonly number[][];
+  ambientChordProgression: readonly (readonly number[])[];
+  ambientMode: 'major' | 'minor';
 }
+
+const MAJOR_CHORDS = [
+  [220, 277, 330],
+  [262, 330, 392],
+  [294, 370, 440],
+  [247, 311, 370],
+] as const;
+
+const MINOR_CHORDS = [
+  [220, 262, 330],
+  [262, 311, 392],
+  [294, 349, 440],
+  [247, 294, 370],
+] as const;
 
 export const SYNTH_PRESETS: Record<SynthPresetId, SynthPreset> = {
   'deep-work': {
@@ -19,58 +34,84 @@ export const SYNTH_PRESETS: Record<SynthPresetId, SynthPreset> = {
     label: 'Deep Work',
     description: 'Tập trung sâu',
     brainwave: 'Beta',
-    deltaHz: 10,
+    deltaHz: 20,
     baseFrequency: 200,
-    beatDifference: 10,
-    ambientChordProgression: [
-      [220, 277, 330],
-      [196, 246, 293],
-      [220, 262, 392],
-      [174, 220, 261],
-    ],
+    beatDifference: 20,
+    ambientChordProgression: MAJOR_CHORDS,
+    ambientMode: 'major',
   },
   relax: {
     id: 'relax',
-    label: 'Relax',
-    description: 'Thư giãn',
+    label: 'Alpha',
+    description: 'Thư giãn & sáng tạo',
     brainwave: 'Alpha',
-    deltaHz: 6,
+    deltaHz: 10,
     baseFrequency: 200,
-    beatDifference: 6,
-    ambientChordProgression: [
-      [196, 247, 294],
-      [174, 220, 261],
-      [220, 262, 330],
-      [196, 246, 293],
-    ],
+    beatDifference: 10,
+    ambientChordProgression: MAJOR_CHORDS,
+    ambientMode: 'major',
   },
   sleep: {
     id: 'sleep',
     label: 'Sleep',
     description: 'Chuẩn bị nghỉ ngơi',
     brainwave: 'Delta',
-    deltaHz: 4,
+    deltaHz: 2,
     baseFrequency: 200,
-    beatDifference: 4,
-    ambientChordProgression: [
-      [174, 220, 261],
-      [146, 196, 220],
-      [131, 174, 220],
-      [174, 220, 262],
-    ],
+    beatDifference: 2,
+    ambientChordProgression: MINOR_CHORDS,
+    ambientMode: 'minor',
+  },
+  meditation: {
+    id: 'meditation',
+    label: 'Meditation',
+    description: 'Thiền định & giai điệu đêm',
+    brainwave: 'Theta',
+    deltaHz: 6,
+    baseFrequency: 200,
+    beatDifference: 6,
+    ambientChordProgression: MINOR_CHORDS,
+    ambientMode: 'minor',
+  },
+  energy: {
+    id: 'energy',
+    label: 'Energy',
+    description: 'Năng lượng & tập luyện',
+    brainwave: 'Gamma',
+    deltaHz: 35,
+    baseFrequency: 200,
+    beatDifference: 35,
+    ambientChordProgression: MAJOR_CHORDS,
+    ambientMode: 'major',
   },
 };
+
+const THETA_MOODS = ['night_serenade'];
+const ALPHA_MOODS = [
+  'calm',
+  'dreamy',
+  'sad',
+  'calm_unwind',
+  'creative_spark',
+  'heartbreak_healing',
+  'melancholy_chill',
+];
 
 export function presetForMoodActivity(
   moodId: string,
   activityId: string,
 ): SynthPresetId {
   if (activityId === 'sleep' || activityId === 'rest') return 'sleep';
+  if (activityId === 'workout' || moodId === 'energy_boost' || moodId === 'euphoric_bliss') {
+    return 'energy';
+  }
+  if (activityId === 'meditation' || THETA_MOODS.includes(moodId)) {
+    return 'meditation';
+  }
   if (
     activityId === 'relax' ||
-    activityId === 'meditation' ||
     activityId === 'walking' ||
-    ['calm', 'dreamy', 'sad', 'calm_unwind', 'heartbreak_healing', 'melancholy_chill', 'night_serenade'].includes(moodId)
+    ALPHA_MOODS.includes(moodId)
   ) {
     return 'relax';
   }
