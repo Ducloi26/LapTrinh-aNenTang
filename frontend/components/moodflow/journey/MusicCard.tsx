@@ -207,12 +207,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 11.5,
     color: COLORS.faint,
-<<<<<<< HEAD:components/moodflow/journey/MusicCard.tsx
     lineHeight: 17,
     fontStyle: "italic",
-=======
-    lineHeight: 16,
-    fontStyle: 'italic',
->>>>>>> bd07347ee7ce77263b32c5ea829322bb9a8e0027:frontend/components/moodflow/journey/MusicCard.tsx
   },
 });

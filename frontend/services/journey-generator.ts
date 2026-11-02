@@ -4,8 +4,8 @@ import {
   JOURNEY_4_STAGES,
   TRACK_POOL,
   ACTIVITIES,
-  StageTemplate,
 } from '@/constants/moodflow';
+import type { DNARecommendationPreferences } from '@/services/dna-service';
 
 export interface Stage {
   key: string;
@@ -72,8 +72,14 @@ export function generateJourney(params: {
   moodTo: Mood;
   activity: string;
   duration: number;
+  preferences?: DNARecommendationPreferences;
 }): Journey {
-  const { moodFrom, moodTo, activity, duration } = params;
+  const { moodFrom, moodTo, activity, duration, preferences } = params;
+  const hasCustomizedPreferences =
+    preferences !== undefined &&
+    (preferences.energyOffset !== 0 ||
+      preferences.tempoOffset !== 0 ||
+      preferences.vocalPreference !== 50);
   let t = 0;
 
   const stages: Stage[] = JOURNEY_4_STAGES.map((tpl, i) => {
@@ -85,8 +91,28 @@ export function generateJourney(params: {
     // Mỗi giai đoạn chọn từ 1 đến 2 bài hát phù hợp thời lượng
     const trackCount = Math.max(1, Math.min(pool.length, Math.round(stageMin / 10)));
 
+    const stageProgress = i / Math.max(JOURNEY_4_STAGES.length - 1, 1);
+    const targetEnergy = Math.min(100, Math.max(0,
+      moodFrom.targetEnergy +
+      (moodTo.targetEnergy - moodFrom.targetEnergy) * stageProgress +
+      (preferences?.energyOffset ?? 0)
+    ));
+    const targetTempo = Math.min(
+      160,
+      Math.max(40, 60 + targetEnergy * 0.7 + (preferences?.tempoOffset ?? 0))
+    );
+    const rankedPool = hasCustomizedPreferences && preferences
+      ? pool
+          .map((track) => ({
+            track,
+            score: preferenceScore(track, targetEnergy, targetTempo, preferences),
+          }))
+          .sort((first, second) => second.score - first.score)
+          .map(({ track }) => track)
+      : pool;
+
     const tracks: Track[] = Array.from({ length: trackCount }, (_, idx) => {
-      const base = pool[idx % pool.length];
+      const base = rankedPool[idx % rankedPool.length];
       return {
         ...base,
         mood: i === 0 ? moodFrom.label : moodTo.label,
@@ -117,4 +143,24 @@ export function generateJourney(params: {
     moodTo,
     activityLabel: act ? act.label : 'Tự do',
   };
+}
+
+function preferenceScore(
+  track: Track,
+  targetEnergy: number,
+  targetTempo: number,
+  preferences: DNARecommendationPreferences
+): number {
+  const energyMatch = 1 - Math.min(1, Math.abs(track.energy - targetEnergy) / 100);
+  const tempoMatch =
+    track.bpm === undefined
+      ? 0.5
+      : 1 - Math.min(1, Math.abs(track.bpm - targetTempo) / 120);
+  const vocalMatch =
+    track.vocal === undefined
+      ? 0.5
+      : 1 -
+        Math.abs((track.vocal ? 100 : 0) - preferences.vocalPreference) / 100;
+
+  return energyMatch * 0.5 + tempoMatch * 0.3 + vocalMatch * 0.2;
 }

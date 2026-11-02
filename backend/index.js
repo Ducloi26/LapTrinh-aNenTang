@@ -13,6 +13,7 @@ const rootEnv = path.resolve(__dirname, '../.env');
 const envPath = fs.existsSync(localEnv) ? localEnv : rootEnv;
 let supabaseUrl = '';
 let supabaseAnonKey = '';
+let supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
 
 if (fs.existsSync(envPath)) {
   const envContent = fs.readFileSync(envPath, 'utf8');
@@ -24,12 +25,20 @@ if (fs.existsSync(envPath)) {
     if (trimmed.startsWith('EXPO_PUBLIC_SUPABASE_ANON_KEY=')) {
       supabaseAnonKey = trimmed.split('=')[1].trim();
     }
+    if (trimmed.startsWith('SUPABASE_SERVICE_ROLE_KEY=')) {
+      supabaseServiceRoleKey = trimmed.slice('SUPABASE_SERVICE_ROLE_KEY='.length).trim();
+    }
   });
 }
 
 // 2. Khởi tạo Supabase client (dùng để lưu trữ CSDL)
 const supabase = (supabaseUrl && supabaseAnonKey) 
   ? createClient(supabaseUrl, supabaseAnonKey) 
+  : null;
+const supabaseAdmin = (supabaseUrl && supabaseServiceRoleKey)
+  ? createClient(supabaseUrl, supabaseServiceRoleKey, {
+      auth: { autoRefreshToken: false, persistSession: false },
+    })
   : null;
 
 const app = express();
@@ -816,6 +825,180 @@ app.get('/api/tracks', async (req, res) => {
     res.json({ success: true, count: data.length, data });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+/**
+ * [GET] /api/music-dna/:userId/listening-history
+ * Lấy lịch sử nghe của người dùng đã xác thực để tính Music DNA
+ */
+app.get('/api/music-dna/:userId/listening-history', async (req, res) => {
+  if (!supabase) {
+    return res.status(500).json({ success: false, error: 'Chưa cấu hình Supabase Client.' });
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, error: 'Chưa cung cấp Token đăng nhập.' });
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+  } catch (err) {
+    return res.status(401).json({ success: false, error: 'Token không hợp lệ hoặc đã hết hạn.' });
+  }
+
+  if (!decoded.id || decoded.id !== req.params.userId) {
+    return res.status(403).json({ success: false, error: 'Không có quyền xem lịch sử nghe này.' });
+  }
+
+  try {
+    const since = new Date();
+    since.setDate(since.getDate() - 30);
+
+    const records = [];
+    const pageSize = 1000;
+    for (let offset = 0; ; offset += pageSize) {
+      const { data, error } = await supabase
+        .from('listening_history')
+        .select('listened_seconds, completed, tracks!inner(genre, track_features(*))')
+        .eq('user_id', decoded.id)
+        .gte('played_at', since.toISOString())
+        .gt('listened_seconds', 0)
+        .order('played_at', { ascending: false })
+        .range(offset, offset + pageSize - 1);
+
+      if (error) {
+        return res.status(400).json({ success: false, error: error.message });
+      }
+
+      records.push(...(data || []));
+      if (!data || data.length < pageSize) break;
+    }
+
+    return res.json({ success: true, count: records.length, data: records });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.get('/api/music-dna/:userId/preferences', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({
+      success: false,
+      error: 'Cần cấu hình SUPABASE_SERVICE_ROLE_KEY và chạy migration Music DNA preferences.',
+    });
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, error: 'Chưa cung cấp Token đăng nhập.' });
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+  } catch (err) {
+    return res.status(401).json({ success: false, error: 'Token không hợp lệ hoặc đã hết hạn.' });
+  }
+
+  if (!decoded.id || decoded.id !== req.params.userId) {
+    return res.status(403).json({ success: false, error: 'Không có quyền xem tùy chỉnh này.' });
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('user_dna_preferences')
+      .select('energy_offset, tempo_offset, vocal_preference')
+      .eq('user_id', decoded.id)
+      .maybeSingle();
+
+    if (error) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        energyOffset: data?.energy_offset ?? 0,
+        tempoOffset: data?.tempo_offset ?? 0,
+        vocalPreference: data?.vocal_preference ?? 50,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+app.put('/api/music-dna/:userId/preferences', async (req, res) => {
+  if (!supabaseAdmin) {
+    return res.status(503).json({
+      success: false,
+      error: 'Cần cấu hình SUPABASE_SERVICE_ROLE_KEY và chạy migration Music DNA preferences.',
+    });
+  }
+
+  const authHeader = req.headers.authorization;
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return res.status(401).json({ success: false, error: 'Chưa cung cấp Token đăng nhập.' });
+  }
+
+  let decoded;
+  try {
+    decoded = jwt.verify(authHeader.split(' ')[1], JWT_SECRET);
+  } catch (err) {
+    return res.status(401).json({ success: false, error: 'Token không hợp lệ hoặc đã hết hạn.' });
+  }
+
+  if (!decoded.id || decoded.id !== req.params.userId) {
+    return res.status(403).json({ success: false, error: 'Không có quyền sửa tùy chỉnh này.' });
+  }
+
+  const { energyOffset, tempoOffset, vocalPreference } = req.body;
+  const isIntegerInRange = (value, min, max) =>
+    Number.isInteger(value) && value >= min && value <= max;
+  if (
+    !isIntegerInRange(energyOffset, -20, 20) ||
+    !isIntegerInRange(tempoOffset, -20, 20) ||
+    !isIntegerInRange(vocalPreference, 0, 100)
+  ) {
+    return res.status(400).json({
+      success: false,
+      error: 'Giá trị Music DNA nằm ngoài phạm vi cho phép.',
+    });
+  }
+
+  try {
+    const { data, error } = await supabaseAdmin
+      .from('user_dna_preferences')
+      .upsert(
+        {
+          user_id: decoded.id,
+          energy_offset: energyOffset,
+          tempo_offset: tempoOffset,
+          vocal_preference: vocalPreference,
+          updated_at: new Date().toISOString(),
+        },
+        { onConflict: 'user_id' }
+      )
+      .select('energy_offset, tempo_offset, vocal_preference')
+      .single();
+
+    if (error) {
+      return res.status(400).json({ success: false, error: error.message });
+    }
+
+    return res.json({
+      success: true,
+      data: {
+        energyOffset: data.energy_offset,
+        tempoOffset: data.tempo_offset,
+        vocalPreference: data.vocal_preference,
+      },
+    });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

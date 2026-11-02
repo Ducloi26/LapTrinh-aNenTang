@@ -29,19 +29,6 @@ import SettingsPage from "@/components/moodflow/settings/SettingsPage";
 import StatisticsPage from "@/components/moodflow/statistics/StatisticsPage";
 
 // Modals & Player
-<<<<<<< HEAD:app/index.tsx
-//import BottomPlayer from '@/components/moodflow/player/BottomPlayer';
-import AIAssistantModal from "@/components/moodflow/ai-assistant/AIAssistantModal";
-import GeneratingModal from "@/components/moodflow/ai-assistant/GeneratingModal";
-import NowPlayingModal from "@/components/moodflow/player/NowPlayingModal";
-
-// Auth Screen
-import AuthScreen from "@/app/auth";
-
-export default function MoodFlowMain() {
-  const [authed, setAuthed] = useState(true);
-  const [userName, setUserName] = useState("Lợi");
-=======
 import BottomPlayer from '@/components/moodflow/player/BottomPlayer';
 import NowPlayingModal from '@/components/moodflow/player/NowPlayingModal';
 import AIAssistantModal from '@/components/moodflow/ai-assistant/AIAssistantModal';
@@ -52,12 +39,23 @@ import SessionFeedbackModal from '@/components/moodflow/statistics/SessionFeedba
 import AuthScreen from '@/app/auth';
 import { supabase } from '@/lib/supabase';
 import { getCurrentUserProfile } from '@/services/mood-service';
+import {
+  DEFAULT_DNA_PREFERENCES,
+  getDNARecommendationPreferences,
+} from '@/services/dna-service';
+import type { DNARecommendationPreferences } from '@/services/dna-service';
 
 export default function MoodFlowMain() {
   const [authed, setAuthed] = useState(true);
   const [userName, setUserName] = useState('Người nghe');
   const [userId, setUserId] = useState<string>('guest');
   const [userRole, setUserRole] = useState<'user' | 'admin'>('user');
+  const [dnaPreferences, setDnaPreferences] =
+    useState<DNARecommendationPreferences>(DEFAULT_DNA_PREFERENCES);
+  const [dnaPreferencesReady, setDnaPreferencesReady] = useState(false);
+  const [dnaPreferencesLoadError, setDnaPreferencesLoadError] = useState<
+    string | null
+  >(null);
 
   // Kiểm tra session từ Backend JWT hoặc Supabase Cloud
   React.useEffect(() => {
@@ -97,7 +95,34 @@ export default function MoodFlowMain() {
 
     return () => subscription.unsubscribe();
   }, []);
->>>>>>> bd07347ee7ce77263b32c5ea829322bb9a8e0027:frontend/app/index.tsx
+
+  React.useEffect(() => {
+    let active = true;
+    setDnaPreferencesReady(false);
+    setDnaPreferencesLoadError(null);
+    setDnaPreferences(DEFAULT_DNA_PREFERENCES);
+
+    getDNARecommendationPreferences(userId)
+      .then((preferences) => {
+        if (active) setDnaPreferences(preferences);
+      })
+      .catch((cause: unknown) => {
+        if (active) {
+          setDnaPreferencesLoadError(
+            cause instanceof Error
+              ? cause.message
+              : 'Không thể tải tùy chỉnh Music DNA.'
+          );
+        }
+      })
+      .finally(() => {
+        if (active) setDnaPreferencesReady(true);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [userId]);
 
   // App Navigation & Responsive
   const [page, setPage] = useState("home");
@@ -113,52 +138,29 @@ export default function MoodFlowMain() {
 
   // App State: Mood selection & generated journey
   const [state, setState] = useState({
-<<<<<<< HEAD:app/index.tsx
-    moodFrom: "anxious",
-    moodTo: "focus",
-    activity: "coding",
-    duration: 120,
-=======
     moodFrom: 'deep_focus',
     moodTo: 'calm_unwind',
     activity: 'deep_work',
     duration: 30,
->>>>>>> bd07347ee7ce77263b32c5ea829322bb9a8e0027:frontend/app/index.tsx
   });
 
   const [journey, setJourney] = useState<Journey | null>(() =>
     generateJourney({
-<<<<<<< HEAD:app/index.tsx
-      moodFrom: moodById("anxious"),
-      moodTo: moodById("focus"),
-      activity: "coding",
-      duration: 120,
-    }),
-=======
       moodFrom: moodById('deep_focus'),
       moodTo: moodById('calm_unwind'),
       activity: 'deep_work',
       duration: 30,
     })
->>>>>>> bd07347ee7ce77263b32c5ea829322bb9a8e0027:frontend/app/index.tsx
   );
 
   // Music Playback state
   const [nowPlaying, setNowPlaying] = useState<Track | null>(
-<<<<<<< HEAD:app/index.tsx
-    () => TRACK_POOL.focus[0],
-=======
     () => TRACK_POOL.acknowledge?.[0] || null
->>>>>>> bd07347ee7ce77263b32c5ea829322bb9a8e0027:frontend/app/index.tsx
   );
   const [stageInfo, setStageInfo] = useState({
     index: 0,
     total: 4,
-<<<<<<< HEAD:app/index.tsx
-    title: "Focus",
-=======
     title: 'Khởi đầu & Thấu cảm',
->>>>>>> bd07347ee7ce77263b32c5ea829322bb9a8e0027:frontend/app/index.tsx
   });
   const [playing, setPlaying] = useState(false);
 
@@ -197,6 +199,7 @@ export default function MoodFlowMain() {
             moodTo: to,
             activity: activeState.activity,
             duration: activeState.duration,
+            preferences: dnaPreferences,
           });
           setJourney(j);
           setIsGenerating(false);
@@ -226,7 +229,7 @@ export default function MoodFlowMain() {
             }
 
             const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-            if (token) headers['Authorization'] = `Bearer ${token}`;
+            if (token) headers.Authorization = `Bearer ${token}`;
 
             await fetch('http://localhost:5000/api/journeys', {
               method: 'POST',
@@ -363,18 +366,17 @@ export default function MoodFlowMain() {
           />
         );
       case "dna":
-        return <MusicDNAPage />;
+        return (
+          <MusicDNAPage
+            userId={userId}
+            preferences={dnaPreferences}
+            preferencesReady={dnaPreferencesReady}
+            preferencesLoadError={dnaPreferencesLoadError}
+            onPreferencesChange={setDnaPreferences}
+          />
+        );
       case "discover":
         return <DiscoverPage />;
-<<<<<<< HEAD:app/index.tsx
-      case "mymusic":
-        return <MyMusicPage onPlayTrack={handlePlayTrack} />;
-      case "community":
-        return <CommunityPage />;
-      case "stats":
-        return <StatisticsPage />;
-      case "settings":
-=======
       case 'mymusic':
         return (
           <MyMusicPage
@@ -415,7 +417,6 @@ export default function MoodFlowMain() {
           />
         );
       case 'settings':
->>>>>>> bd07347ee7ce77263b32c5ea829322bb9a8e0027:frontend/app/index.tsx
         return (
           <SettingsPage
             onLogout={() => {
@@ -428,7 +429,18 @@ export default function MoodFlowMain() {
       default:
         return null;
     }
-  }, [page, state, journey, userName, playing]);
+  }, [
+    page,
+    state,
+    journey,
+    userName,
+    playing,
+    userId,
+    userRole,
+    dnaPreferences,
+    dnaPreferencesReady,
+    dnaPreferencesLoadError,
+  ]);
 
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
@@ -458,11 +470,7 @@ export default function MoodFlowMain() {
     return (
       <AuthScreen
         onAuthSuccess={(name) => {
-<<<<<<< HEAD:app/index.tsx
-          setUserName(name || "Lợi");
-=======
           setUserName(name || 'Người nghe');
->>>>>>> bd07347ee7ce77263b32c5ea829322bb9a8e0027:frontend/app/index.tsx
           setAuthed(true);
         }}
       />
@@ -530,8 +538,6 @@ export default function MoodFlowMain() {
       )}
 
       {/* Persistent Bottom Music Player */}
-<<<<<<< HEAD:app/index.tsx
-=======
       <BottomPlayer
         nowPlaying={nowPlaying}
         playing={playing}
@@ -542,7 +548,6 @@ export default function MoodFlowMain() {
         onPrev={handlePrevTrack}
         onFinishJourney={() => setFeedbackModalOpen(true)}
       />
->>>>>>> bd07347ee7ce77263b32c5ea829322bb9a8e0027:frontend/app/index.tsx
 
       {/* Full-Screen Now Playing Experience Modal */}
       {nowPlayingModal && (
