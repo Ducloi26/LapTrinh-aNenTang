@@ -1,56 +1,105 @@
-# Welcome to your Expo app 👋
+# 🎵 MoodFlow - Ứng dụng Trị liệu Âm nhạc Cá nhân hóa Đa nền tảng
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+> **Dự án Môn học:** Lập trình Đa nền tảng (LTDNT)  
+> **Kiến trúc:** Client - Server - Database (Tách biệt 100% giữa Frontend và Backend)
 
-## Get started
+---
 
-1. Install dependencies
+## 📂 Cấu trúc Dự án
 
-   ```bash
-   npm install
-   ```
-
-2. Start the app
-
-   ```bash
-   npx expo start
-   ```
-
-In the output, you'll find options to open the app in a
-
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
-
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
-
-## Get a fresh project
-
-When you're ready, run:
-
-```bash
-npm run reset-project
+```text
+LapTrinh-aNenTang/
+├── backend/                       # 🟢 MÁY CHỦ BACKEND (Node.js Express)
+│   ├── index.js                   # API Server (Auth Bcrypt + JWT, Moods, Activities, Tracks)
+│   ├── package.json               # Thư viện Express, Cors, Bcryptjs, Jsonwebtoken, Nodemon
+│   └── data/                      # Lưu trữ dữ liệu tài khoản cục bộ
+│
+├── frontend/                      # 🔵 ỨNG DỤNG FRONTEND (React Native / Expo)
+│   ├── app/                       # Expo Router (Trang chủ, Đăng nhập, Đăng ký)
+│   ├── components/                # Linh kiện UI (Thẻ bài hát BPM, Đường cong năng lượng, Player)
+│   ├── constants/                 # 8 tâm trạng, 4 hoạt động, 4 giai đoạn khoa học
+│   ├── services/                  # Thuật toán hành trình 4 giai đoạn, API Service
+│   └── package.json               # Thư viện Expo, Reanimated, Lucide Icons
+│
+├── supabase/                      # 🗄️ CƠ SỞ DỮ LIỆU (PostgreSQL)
+│   ├── seed_moods_activities.sql  # Dữ liệu mẫu 8 tâm trạng & 4 hoạt động
+│   └── create_app_users.sql       # Bảng người dùng app_users
+│
+├── setup.bat                      # ⚡ File tự động cài đặt 1-Click cho Windows
+├── setup.sh                       # ⚡ File tự động cài đặt cho macOS / Linux
+├── package.json                   # Bộ điều hướng script tổng của dự án
+└── README.md                      # Hướng dẫn chi tiết
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+---
 
-### Other setup steps
+## 🚀 Hướng dẫn Cài đặt sau khi Git Clone
 
-- To set up ESLint for linting, run `npx expo lint`, or follow our guide on ["Using ESLint and Prettier"](https://docs.expo.dev/guides/using-eslint/)
-- If you'd like to set up unit testing, follow our guide on ["Unit Testing with Jest"](https://docs.expo.dev/develop/unit-testing/)
-- Learn more about the TypeScript setup in this template in our guide on ["Using TypeScript"](https://docs.expo.dev/guides/typescript/)
+Sau khi clone dự án về máy tính:
 
-## Learn more
+```bash
+git clone https://github.com/Ducloi26/LapTrinh-aNenTang.git
+cd LapTrinh-aNenTang
+```
 
-To learn more about developing your project with Expo, look at the following resources:
+Bạn có thể chọn **1 trong 2 cách** sau để tự động tải toàn bộ thư viện:
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+### 🔹 Cách 1: Dùng file tự động (Khuyên dùng - Nhanh nhất)
+- **Trên Windows:** Click đúp chuột vào file **`setup.bat`** (hoặc mở Terminal gõ `setup.bat`).
+- **Trên macOS / Linux:** Mở Terminal và gõ:
+  ```bash
+  chmod +x setup.sh && ./setup.sh
+  ```
+*(Script sẽ tự động chạy `npm install` cho thư mục gốc, backend và frontend, đồng thời tự tạo file cấu hình `.env`).*
 
-## Join the community
+---
 
-Join our community of developers creating universal apps.
+### 🔹 Cách 2: Dùng lệnh NPM tại thư mục gốc
+Nếu muốn tự chạy bằng dòng lệnh, bạn chỉ cần gõ đúng 1 lệnh duy nhất tại thư mục gốc:
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```bash
+npm run install:all
+```
+*(Lệnh này sẽ tự động cài toàn bộ packages cho cả root, backend và frontend).*
+
+---
+
+## ⚙️ Cấu hình Biến môi trường (.env)
+
+Tạo file `.env` ở thư mục gốc (hoặc copy từ `.env.example`):
+
+```env
+EXPO_PUBLIC_SUPABASE_URL=https://oocldjiknduntqrpglua.supabase.co
+EXPO_PUBLIC_SUPABASE_ANON_KEY=sb_publishable_ByDOJJZoAQchyTosCmfG-A_W8P3tN7Q
+```
+*(Nếu đã chạy `setup.bat`, file `.env` sẽ được tự động tạo sẵn cho bạn).*
+
+---
+
+## 💻 Hướng dẫn Khởi chạy Dự án
+
+Để chạy đúng chuẩn mô hình Client - Server, bạn mở **2 tab Terminal** trong VS Code:
+
+### 🟢 Terminal 1: Chạy Backend (Node.js Express)
+```bash
+cd backend
+npm run dev
+```
+- Máy chủ Backend sẽ khởi chạy tại: **`http://localhost:5000`**
+- Hỗ trợ **Nodemon** tự động reload code và in log chi tiết cho từng request.
+- Xác thực tài khoản độc lập bằng **Bcrypt password hashing** và **JWT Token**.
+
+---
+
+### 🔵 Terminal 2: Chạy Frontend (Expo / React Native)
+```bash
+cd frontend
+npm run web
+```
+- Giao diện ứng dụng MoodFlow sẽ tự động mở trên trình duyệt tại: **`http://localhost:8081`**
+- Hỗ trợ đầy đủ: Đăng ký / Đăng nhập, Trợ lý AI, Khám phá 8 tâm trạng, 4 hoạt động và Hành trình âm nhạc 4 giai đoạn chuẩn khoa học.
+
+---
+
+## 🛑 Cách tắt ứng dụng
+- Nhấn tổ hợp phím **`Ctrl + C`** ở từng tab Terminal khi muốn dừng máy chủ.

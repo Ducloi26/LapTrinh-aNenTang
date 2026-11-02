@@ -66,6 +66,8 @@ export default function Icon({
       flower: <g><circle cx="12" cy="12" r="3"/><path d="M12 16.5A4.5 4.5 0 1 1 7.5 12"/><path d="M12 7.5A4.5 4.5 0 1 1 16.5 12"/><path d="M7.5 12A4.5 4.5 0 1 1 12 7.5"/><path d="M16.5 12A4.5 4.5 0 1 1 12 16.5"/></g>,
       activity: <polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/>,
       moon: <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/>,
+      edit: <g><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></g>,
+      trash: <g><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" x2="10" y1="11" y2="17"/><line x1="14" x2="14" y1="11" y2="17"/></g>,
     };
 
     const SvgElement = 'svg' as any;

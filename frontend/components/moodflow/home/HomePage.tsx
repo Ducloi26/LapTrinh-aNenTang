@@ -12,8 +12,10 @@ import {
   ACTIVITIES,
   DURATIONS,
   moodById,
-  JourneySelection,
+  Mood,
+  Activity,
 } from '@/constants/moodflow';
+import { getMoodsFromBackend, getActivitiesFromBackend } from '@/services/mood-service';
 import SectionTitle from '@/components/moodflow/shared/SectionTitle';
 import GhostButton from '@/components/moodflow/shared/GhostButton';
 import Icon from '@/components/moodflow/shared/Icon';
@@ -38,6 +40,19 @@ export default function HomePage({
   aiReady,
   userName,
 }: HomePageProps) {
+  const [moodList, setMoodList] = React.useState<Mood[]>(MOODS);
+  const [actList, setActList] = React.useState<Activity[]>(ACTIVITIES);
+
+  React.useEffect(() => {
+    // Tự động đồng bộ danh mục từ Backend Express mỗi khi vào trang chủ
+    getMoodsFromBackend().then((res) => {
+      if (res && res.length > 0) setMoodList(res);
+    });
+    getActivitiesFromBackend().then((res) => {
+      if (res && res.length > 0) setActList(res);
+    });
+  }, []);
+
   const currentMood = moodById(state.moodFrom);
   const goalMood = moodById(state.moodTo);
 
@@ -46,7 +61,7 @@ export default function HomePage({
       {/* Lời chào đầu trang */}
       <View style={styles.greetingBox}>
         <Text style={styles.greetingTitle}>
-          Chào bạn, {userName || 'Lợi'} 👋
+          Chào bạn, {userName || 'Người nghe'} 👋
         </Text>
         <Text style={styles.greetingSub}>
           Hôm nay tâm trí bạn đang tìm kiếm giai điệu như thế nào?
@@ -86,7 +101,7 @@ export default function HomePage({
         subtitle="Chọn 1 trong 8 sắc thái cảm xúc phản ánh đúng nhất trạng thái lúc này"
       />
       <View style={styles.gridWrap}>
-        {MOODS.map((m) => (
+        {moodList.map((m) => (
           <MoodCard
             key={m.id}
             mood={m}
@@ -102,7 +117,7 @@ export default function HomePage({
         subtitle="Âm nhạc sẽ tự động tối ưu dải nhịp độ BPM và tiết tấu phù hợp với hoạt động"
       />
       <View style={styles.gridWrap}>
-        {ACTIVITIES.map((a) => (
+        {actList.map((a) => (
           <ActivityCard
             key={a.id}
             activity={a}
@@ -121,7 +136,7 @@ export default function HomePage({
         <JourneyLine from={currentMood} to={goalMood} />
       </View>
       <View style={styles.ghostList}>
-        {MOODS.filter((m) => m.id !== state.moodFrom).map((m) => (
+        {moodList.filter((m) => m.id !== state.moodFrom).map((m) => (
           <GhostButton
             key={m.id}
             active={state.moodTo === m.id}

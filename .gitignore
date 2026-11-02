@@ -45,7 +45,9 @@ data/
 *.doc
 KE_HOACH_CHI_TIET.*
 THIET_KE_*
-
+/THONG_KE_CHUC_NANG_DA_LAM/
+*.docx
+*.doc
 # Database & scripts phụ trợ (không push lên git)
 DATABASE_SCHEMA*
 supabase/
