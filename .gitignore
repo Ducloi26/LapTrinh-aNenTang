@@ -84,3 +84,4 @@ CLAUDE.md
 !/supabase/tests/
 /supabase/tests/*
 !/supabase/tests/listening-history-db.test.cjs
+/docs/testing/PLAYER_HISTORY_FILES.md
