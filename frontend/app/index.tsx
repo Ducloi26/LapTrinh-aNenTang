@@ -38,6 +38,7 @@ import BottomPlayer from '@/components/moodflow/player/BottomPlayer';
 import NowPlayingModal from '@/components/moodflow/player/NowPlayingModal';
 import AIAssistantModal from '@/components/moodflow/ai-assistant/AIAssistantModal';
 import GeneratingModal from '@/components/moodflow/ai-assistant/GeneratingModal';
+import SessionFeedbackModal from '@/components/moodflow/statistics/SessionFeedbackModal';
 
 // Auth Screen
 import AuthScreen from '@/app/auth';
@@ -47,6 +48,8 @@ import { getCurrentUserProfile } from '@/services/mood-service';
 export default function MoodFlowMain() {
   const [authed, setAuthed] = useState(true);
   const [userName, setUserName] = useState('Người nghe');
+  const [userId, setUserId] = useState<string>('guest');
+  const [userRole, setUserRole] = useState<'user' | 'admin'>('user');
 
   // Kiểm tra session từ Backend JWT hoặc Supabase Cloud
   React.useEffect(() => {
@@ -57,6 +60,8 @@ export default function MoodFlowMain() {
         try {
           const u = JSON.parse(savedUser);
           if (u?.displayName) setUserName(u.displayName);
+          if (u?.id) setUserId(u.id);
+          if (u?.role) setUserRole(u.role);
           setAuthed(true);
         } catch (e) {}
       }
@@ -65,6 +70,7 @@ export default function MoodFlowMain() {
     supabase.auth.getSession().then(({ data: { session } }) => {
       if (session?.user) {
         setAuthed(true);
+        if (session.user.id) setUserId(session.user.id);
         getCurrentUserProfile().then((prof) => {
           if (prof?.displayName) setUserName(prof.displayName);
         });
@@ -74,6 +80,7 @@ export default function MoodFlowMain() {
     const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
       if (session?.user) {
         setAuthed(true);
+        if (session.user.id) setUserId(session.user.id);
         getCurrentUserProfile().then((prof) => {
           if (prof?.displayName) setUserName(prof.displayName);
         });
@@ -123,6 +130,21 @@ export default function MoodFlowMain() {
   });
   const [playing, setPlaying] = useState(false);
 
+  // Cảnh báo người dùng trước khi đóng tab/tắt app khi đang nghe
+  React.useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const handleBeforeUnload = (e: any) => {
+        if (playing) {
+          e.preventDefault();
+          e.returnValue = 'Bạn có muốn đánh giá phiên trị liệu âm nhạc trước khi rời đi?';
+          return e.returnValue;
+        }
+      };
+      window.addEventListener('beforeunload', handleBeforeUnload);
+      return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+    }
+  }, [playing]);
+
   const currentMood = moodById(state.moodFrom);
 
   // Trigger Journey Generation with 5-step animation
@@ -135,10 +157,12 @@ export default function MoodFlowMain() {
       setGenerationStep((prev) => {
         if (prev < 4) return prev + 1;
         clearInterval(interval);
-        setTimeout(() => {
+        setTimeout(async () => {
+          const from = moodById(activeState.moodFrom);
+          const to = moodById(activeState.moodTo);
           const j = generateJourney({
-            moodFrom: moodById(activeState.moodFrom),
-            moodTo: moodById(activeState.moodTo),
+            moodFrom: from,
+            moodTo: to,
             activity: activeState.activity,
             duration: activeState.duration,
           });
@@ -155,6 +179,39 @@ export default function MoodFlowMain() {
             });
             setPlaying(true);
             audioSynth.play();
+          }
+
+          // TỰ ĐỘNG LƯU VÀO CSDL BACKEND KHI TẠO HÀNH TRÌNH (GẮN VỚI USER ID)
+          try {
+            const token = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_token') : null;
+            const savedUserStr = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_user') : null;
+            let currentUserId = 'guest';
+            if (savedUserStr) {
+              try {
+                const u = JSON.parse(savedUserStr);
+                if (u?.id) currentUserId = u.id;
+              } catch (e) {}
+            }
+
+            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+            if (token) headers['Authorization'] = `Bearer ${token}`;
+
+            await fetch('http://localhost:5000/api/journeys', {
+              method: 'POST',
+              headers,
+              body: JSON.stringify({
+                title: `${from.emoji} ${from.label} ➔ ${to.emoji} ${to.label}`,
+                moodFrom: from,
+                moodTo: to,
+                activity: j.activityLabel || activeState.activity,
+                duration: j.totalMin,
+                stages: j.stages,
+                userId: currentUserId,
+                userName: userName || 'Người nghe',
+              }),
+            });
+          } catch (err) {
+            console.error('Lỗi tự động lưu hành trình vào CSDL:', err);
           }
         }, 500);
         return prev;
@@ -182,6 +239,58 @@ export default function MoodFlowMain() {
     } else {
       audioSynth.play();
       setPlaying(true);
+    }
+  };
+
+  // Danh sách phẳng tất cả bài hát và giai đoạn trong Hành trình hiện tại
+  const allJourneyTracks = useMemo(() => {
+    if (!journey || !journey.stages) return [];
+    const list: { track: Track; stage: Stage; stageIndex: number }[] = [];
+    journey.stages.forEach((stg, sIdx) => {
+      stg.tracks?.forEach((trk) => {
+        list.push({ track: trk, stage: stg, stageIndex: sIdx });
+      });
+    });
+    return list;
+  }, [journey]);
+
+  // Chuyển sang bài tiếp theo (tự động chuyển giai đoạn 1 -> 2 -> 3 -> 4)
+  const handleNextTrack = () => {
+    if (allJourneyTracks.length === 0) return;
+    const currentIndex = allJourneyTracks.findIndex(
+      (item) => item.track.id === nowPlaying?.id || item.track.title === nowPlaying?.title
+    );
+
+    // KHI NGƯỜI DÙNG NGHE XONG BÀI CUỐI CÙNG CỦA HÀNH TRÌNH 4 GIAI ĐOẠN:
+    const isLastTrack = currentIndex === allJourneyTracks.length - 1;
+    if (isLastTrack) {
+      audioSynth.pause();
+      setPlaying(false);
+      setFeedbackModalOpen(true); // TỰ ĐỘNG HIỆN POP-UP ĐÁNH GIÁ CẢM XÚC!
+      return;
+    }
+
+    const nextIndex =
+      currentIndex >= 0 && currentIndex < allJourneyTracks.length - 1
+        ? currentIndex + 1
+        : 0;
+    const nextItem = allJourneyTracks[nextIndex];
+    if (nextItem) {
+      handlePlayTrack(nextItem.track, nextItem.stage, nextItem.stageIndex);
+    }
+  };
+
+  // Quay lại bài trước đó
+  const handlePrevTrack = () => {
+    if (allJourneyTracks.length === 0) return;
+    const currentIndex = allJourneyTracks.findIndex(
+      (item) => item.track.id === nowPlaying?.id || item.track.title === nowPlaying?.title
+    );
+    const prevIndex =
+      currentIndex > 0 ? currentIndex - 1 : allJourneyTracks.length - 1;
+    const prevItem = allJourneyTracks[prevIndex];
+    if (prevItem) {
+      handlePlayTrack(prevItem.track, prevItem.stage, prevItem.stageIndex);
     }
   };
 
@@ -222,11 +331,44 @@ export default function MoodFlowMain() {
       case 'discover':
         return <DiscoverPage />;
       case 'mymusic':
-        return <MyMusicPage onPlayTrack={handlePlayTrack} />;
+        return (
+          <MyMusicPage
+            onPlayTrack={handlePlayTrack}
+            onSelectJourney={(selectedJ) => {
+              setJourney(selectedJ);
+              setPage('journey');
+              const first = selectedJ.stages?.[0]?.tracks?.[0];
+              if (first) {
+                handlePlayTrack(first, selectedJ.stages[0], 0);
+              }
+            }}
+            onGoToHome={() => setPage('home')}
+          />
+        );
       case 'community':
-        return <CommunityPage />;
+        return (
+          <CommunityPage
+            onSelectJourney={(selectedJ) => {
+              setJourney(selectedJ);
+              setPage('journey');
+              const first = selectedJ.stages?.[0]?.tracks?.[0];
+              if (first) {
+                handlePlayTrack(first, selectedJ.stages[0], 0);
+              }
+            }}
+            userId={userId}
+            userName={userName}
+            userRole={userRole}
+          />
+        );
       case 'stats':
-        return <StatisticsPage />;
+        return (
+          <StatisticsPage
+            userId={userId}
+            userName={userName}
+            currentJourney={journey}
+          />
+        );
       case 'settings':
         return (
           <SettingsPage
@@ -242,7 +384,10 @@ export default function MoodFlowMain() {
     }
   }, [page, state, journey, userName, playing]);
 
-  const handleLogout = async () => {
+  const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
+  const [logoutPending, setLogoutPending] = useState(false);
+
+  const performActualLogout = async () => {
     if (typeof localStorage !== 'undefined') {
       localStorage.removeItem('moodflow_token');
       localStorage.removeItem('moodflow_user');
@@ -253,6 +398,13 @@ export default function MoodFlowMain() {
     audioSynth.pause();
     setPlaying(false);
     setAuthed(false);
+    setLogoutPending(false);
+  };
+
+  const handleLogout = () => {
+    // Khi người dùng bấm đăng xuất hoặc tắt app: Bật Pop-up đánh giá cảm xúc & lưu CSDL
+    setLogoutPending(true);
+    setFeedbackModalOpen(true);
   };
 
   // If user is not logged in, render AuthScreen
@@ -260,7 +412,7 @@ export default function MoodFlowMain() {
     return (
       <AuthScreen
         onAuthSuccess={(name) => {
-          setUserName(name || 'Lợi');
+          setUserName(name || 'Người nghe');
           setAuthed(true);
         }}
       />
@@ -326,6 +478,9 @@ export default function MoodFlowMain() {
         setPlaying={handleTogglePlay}
         stageInfo={stageInfo}
         onOpenNowPlaying={() => setNowPlayingModal(true)}
+        onNext={handleNextTrack}
+        onPrev={handlePrevTrack}
+        onFinishJourney={() => setFeedbackModalOpen(true)}
       />
 
       {/* Full-Screen Now Playing Experience Modal */}
@@ -337,6 +492,8 @@ export default function MoodFlowMain() {
           currentMood={currentMood}
           stageInfo={stageInfo}
           onClose={() => setNowPlayingModal(false)}
+          onNext={handleNextTrack}
+          onPrev={handlePrevTrack}
         />
       )}
 
@@ -347,6 +504,25 @@ export default function MoodFlowMain() {
           currentMood={currentMood}
         />
       )}
+
+      {/* Pop-up Đánh giá Cảm xúc khi thoát app / Đăng xuất */}
+      <SessionFeedbackModal
+        visible={feedbackModalOpen}
+        onClose={() => {
+          setFeedbackModalOpen(false);
+          if (logoutPending) {
+            performActualLogout();
+          }
+        }}
+        onFeedbackSubmitted={() => {
+          setFeedbackModalOpen(false);
+          if (logoutPending) {
+            performActualLogout();
+          }
+        }}
+        userId={userId}
+        journey={journey}
+      />
     </View>
   );
 }

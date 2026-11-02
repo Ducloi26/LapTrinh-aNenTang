@@ -117,14 +117,14 @@ export default function Sidebar({
           style={styles.userAvatar}
         >
           <Text style={styles.userInitial}>
-            {(userName || 'L').charAt(0).toUpperCase()}
+            {(userName || 'N').charAt(0).toUpperCase()}
           </Text>
         </LinearGradient>
 
         {!collapsed && (
           <View style={{ flex: 1, minWidth: 0, marginLeft: 10 }}>
             <Text style={styles.userName} numberOfLines={1}>
-              {userName || 'Lợi'}
+              {userName || 'Người nghe'}
             </Text>
             <Text style={styles.userSub}>Music DNA · 82%</Text>
           </View>

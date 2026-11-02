@@ -19,6 +19,9 @@ interface BottomPlayerProps {
   setPlaying: () => void;
   stageInfo?: { index: number; total: number; title: string };
   onOpenNowPlaying: () => void;
+  onNext?: () => void;
+  onPrev?: () => void;
+  onFinishJourney?: () => void;
 }
 
 export default function BottomPlayer({
@@ -27,6 +30,9 @@ export default function BottomPlayer({
   setPlaying,
   stageInfo,
   onOpenNowPlaying,
+  onNext,
+  onPrev,
+  onFinishJourney,
 }: BottomPlayerProps) {
   const spinValue = useRef(new Animated.Value(0)).current;
 
@@ -87,7 +93,7 @@ export default function BottomPlayer({
       {/* Center Controls & Progress */}
       <View style={styles.centerSection}>
         <View style={styles.controlRow}>
-          <Pressable style={styles.iconBtn}>
+          <Pressable onPress={onPrev} style={styles.iconBtn}>
             <Icon name="skipback" size={16} color={COLORS.muted} />
           </Pressable>
           <Pressable onPress={setPlaying} style={styles.playBtn}>
@@ -97,7 +103,7 @@ export default function BottomPlayer({
               color="#0A0D16"
             />
           </Pressable>
-          <Pressable style={styles.iconBtn}>
+          <Pressable onPress={onNext} style={styles.iconBtn}>
             <Icon name="skipforward" size={16} color={COLORS.muted} />
           </Pressable>
           <SoundWave playing={playing} />
@@ -115,6 +121,11 @@ export default function BottomPlayer({
 
       {/* Right Controls */}
       <View style={styles.rightSection}>
+        {onFinishJourney && (
+          <Pressable onPress={onFinishJourney} style={styles.finishBtn}>
+            <Text style={styles.finishBtnText}>🏁 Đánh giá</Text>
+          </Pressable>
+        )}
         {stageInfo && (
           <Text style={styles.stageText}>
             Giai đoạn {stageInfo.index + 1}/{stageInfo.total} — {stageInfo.title}
@@ -132,6 +143,20 @@ export default function BottomPlayer({
 }
 
 const styles = StyleSheet.create({
+  finishBtn: {
+    backgroundColor: 'rgba(34, 211, 238, 0.15)',
+    borderWidth: 1,
+    borderColor: 'rgba(34, 211, 238, 0.4)',
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    marginRight: 6,
+  },
+  finishBtnText: {
+    color: '#22D3EE',
+    fontSize: 11.5,
+    fontWeight: '700',
+  },
   footer: {
     position: 'absolute',
     left: 0,
