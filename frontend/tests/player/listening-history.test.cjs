@@ -104,7 +104,7 @@ test('pending history is never sent as a different account', async()=>{
 
 test('player service captures final position and records before queue replacement, end and stop', async()=>{
   const {tracker,records,setClock}=trackerFixture();const engines=[];
-  const {PlayerService}=loadModule('services/player-service.ts',{'./audio-engine':{
+  const {PlayerService}=loadModule('services/player-service.ts',{'./audio-service':{audioSynth:{isSupported:false}},'./audio-engine':{
     async configureAudioSession(){},
     createAudioEngine(source,callbacks,options){
       const state={position:0,duration:100,isPlaying:false,isBuffering:false};

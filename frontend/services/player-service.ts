@@ -1,5 +1,6 @@
 import type { Track } from '../constants/moodflow';
 import { SYNTH_PRESETS, SynthPresetId } from './audio-presets';
+import { audioSynth } from './audio-service';
 import { configureAudioSession, createAudioEngine } from './audio-engine';
 import { AudioEngine, cancelledLoad, PlaybackProgress } from './audio-engine.types';
 import { resolveTrackSource } from './track-source';
@@ -117,6 +118,7 @@ export class PlayerService {
     this.volume = Math.max(0, Math.min(1, value));
     this.music?.setVolume(this.volume);
     this.binaural?.setVolume(this.volume * BINAURAL_MIX);
+    if (audioSynth.isSupported) audioSynth.setVolume(this.volume);
   }
 
   async setPreset(preset: SynthPresetId) {
@@ -125,6 +127,9 @@ export class PlayerService {
     ++this.mixGeneration;
     this.binaural?.dispose();
     this.binaural = null;
+    if (audioSynth.isSupported) {
+      await audioSynth.setPreset(preset);
+    }
     if (this.playing) await this.startBinaural();
   }
 
@@ -135,6 +140,9 @@ export class PlayerService {
     ++this.mixGeneration;
     this.binaural?.dispose();
     this.binaural = null;
+    if (audioSynth.isSupported) {
+      void audioSynth.stop().catch((error: unknown) => console.warn('Không dừng được synth', error));
+    }
     this.selectedTrack = null;
     this.publish({ position: 0, duration: 0, isPlaying: false, isBuffering: false });
   }
@@ -172,7 +180,12 @@ export class PlayerService {
       // A failed optional layer must not stop the song.
       console.warn('Không phát được lớp Binaural', error);
     });
-    else this.binaural?.pause();
+    else {
+      this.binaural?.pause();
+      if (audioSynth.isSupported) {
+        void audioSynth.pause().catch((error: unknown) => console.warn('Không tạm dừng được synth', error));
+      }
+    }
   }
 
   private captureHistory() {
@@ -186,6 +199,11 @@ export class PlayerService {
   }
 
   private async startBinaural() {
+    if (audioSynth.isSupported) {
+      audioSynth.setVolume(this.volume);
+      await audioSynth.play(this.preset);
+      return;
+    }
     const generation = this.mixGeneration;
     const source = BINAURAL_SOURCES[this.preset];
     if (!source) return;

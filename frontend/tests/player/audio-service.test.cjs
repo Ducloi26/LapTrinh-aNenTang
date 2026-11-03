@@ -60,6 +60,7 @@ AudioContextMock.instances = [];
 test('Web Audio synth exposes binaural/chord APIs and applies tuning without changing beat Hz', async () => {
   const storage = new Map();
   const timerDelays = [];
+  const timerCallbacks = [];
   const presets = loadModule('services/audio-presets.ts');
   const { audioSynth } = loadModule(
     'services/audio-service.ts',
@@ -77,6 +78,7 @@ test('Web Audio synth exposes binaural/chord APIs and applies tuning without cha
       },
       setTimeout: (_callback, delay) => {
         timerDelays.push(delay);
+        timerCallbacks.push(_callback);
         if (delay === 1000) _callback();
         return timerDelays.length;
       },
@@ -106,6 +108,10 @@ test('Web Audio synth exposes binaural/chord APIs and applies tuning without cha
   assert.equal(context.oscillators[0].frequency.ramps.at(-1).value, 216);
   assert.equal(context.oscillators[1].frequency.ramps.at(-1).value, 222);
   assert.equal(context.oscillators[2].frequency.ramps.at(-1).value, 216);
+  timerCallbacks[0]();
+  assert.equal(context.oscillators.length, 8);
+  assert.notEqual(context.oscillators[5].frequency.value, context.oscillators[2].frequency.value);
+  assert.deepEqual(timerDelays, [8000, 8000]);
   await audioSynth.pause();
   assert.equal(context.state, 'suspended');
   assert.equal(context.gains[0].gain.ramps.at(-1).time, 1);

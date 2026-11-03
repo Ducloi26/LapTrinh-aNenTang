@@ -5,9 +5,18 @@ const { test } = require('node:test');
 const { loadModule } = require('./test-support.cjs');
 const root = path.resolve(__dirname, '../..');
 
-function fixture() {
+function fixture(synthSupported = false) {
   const engines = [];
+  const synth = {
+    isSupported: synthSupported, calls: [],
+    setVolume(value) { this.calls.push(['volume', value]); },
+    async play(preset) { this.calls.push(['play', preset]); },
+    async setPreset(preset) { this.calls.push(['preset', preset]); },
+    async pause() { this.calls.push(['pause']); },
+    async stop() { this.calls.push(['stop']); },
+  };
   const { PlayerService, BINAURAL_MIX } = loadModule('services/player-service.ts', {
+    './audio-service': { audioSynth: synth },
     './audio-engine': {
       configureAudioSession: async () => {},
       createAudioEngine(source, callbacks, options) {
@@ -30,11 +39,33 @@ function fixture() {
       },
     },
   });
-  return { service: new PlayerService(), engines, mix: BINAURAL_MIX };
+  return { service: new PlayerService(), engines, mix: BINAURAL_MIX, synth };
 }
 
 const song = (name = 'song') => ({ title: name, artist: 'Test', cover: '', audioUrl: `https://example.test/${name}.mp3` });
 const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+test('web playback uses the synth for Energy and Meditation, syncs volume and lifecycle without WAV layers', async () => {
+  const { service, engines, synth } = fixture(true);
+  await service.setPreset('energy');
+  await service.load(song());
+  await service.play();
+  await tick();
+  assert.ok(synth.calls.some(([action, preset]) => action === 'play' && preset === 'energy'));
+  assert.equal(engines.length, 1);
+  service.setVolume(0.8);
+  assert.deepEqual(synth.calls.at(-1), ['volume', 0.8]);
+  await service.setPreset('meditation');
+  assert.deepEqual(synth.calls.at(-1), ['play', 'meditation']);
+  service.pause();
+  assert.deepEqual(synth.calls.at(-1), ['pause']);
+  await service.play();
+  await tick();
+  engines[0].callbacks.onEnd();
+  assert.deepEqual(synth.calls.at(-1), ['pause']);
+  service.dispose();
+  assert.deepEqual(synth.calls.at(-1), ['stop']);
+});
 
 test('loads the actual URL and reports engine duration, position and playing state', async () => {
   const { service, engines } = fixture();
