@@ -45,7 +45,7 @@ export interface GenreShare {
 }
 
 interface ListeningRecord {
-  listened_seconds?: unknown;
+  listened_sec?: unknown;
   completed?: unknown;
   played_at?: unknown;
   tracks?: unknown;
@@ -92,7 +92,7 @@ const GENRES = [
 
 const LOOKBACK_DAYS = 30;
 const PAGE_SIZE = 1000;
-const BACKEND_URL = 'http://localhost:5000';
+const BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || 'http://localhost:5000';
 
 function asNumber(value: unknown): number | null {
   if (typeof value === 'number' && Number.isFinite(value)) return value;
@@ -226,7 +226,7 @@ export function classifyListener(
   history: ListeningRecord[]
 ): ListenerIdentity | null {
   const totalSeconds = history.reduce(
-    (total, record) => total + Math.max(0, asNumber(record.listened_seconds) ?? 0),
+    (total, record) => total + Math.max(0, asNumber(record.listened_sec) ?? 0),
     0
   );
   if (totalSeconds <= 0) return null;
@@ -240,7 +240,7 @@ export function classifyListener(
   const artistSeconds = new Map<string, number>();
 
   for (const record of history) {
-    const seconds = Math.max(0, asNumber(record.listened_seconds) ?? 0);
+    const seconds = Math.max(0, asNumber(record.listened_sec) ?? 0);
     if (seconds === 0) continue;
 
     if (getJourney(record)?.activity === 'deep_work') {
@@ -551,7 +551,7 @@ export function aggregateDNA(records: ListeningRecord[]): DNAProfile {
   const genreTotals: Record<string, number> = {};
 
   for (const record of records) {
-    const weight = asNumber(record.listened_seconds);
+    const weight = asNumber(record.listened_sec);
     const features = getFeatures(record);
     if (!weight || weight <= 0) continue;
 
@@ -637,6 +637,12 @@ export async function computeDNA(userId: string): Promise<DNAProfile> {
     }
     records = result.data as ListeningRecord[];
   } else {
+    const { data: sessionData, error: sessionError } = await supabase.auth.getSession();
+    if (sessionError) throw new Error('Không kiểm tra được phiên đăng nhập để đọc lịch sử nghe.');
+    const hasMatchingSession = sessionData.session?.user.id === userId;
+    if (!hasMatchingSession) {
+      throw new Error('Chưa có phiên Supabase phù hợp để đọc lịch sử nghe của tài khoản này.');
+    }
     const since = new Date();
     since.setDate(since.getDate() - LOOKBACK_DAYS);
     records = [];
@@ -645,11 +651,12 @@ export async function computeDNA(userId: string): Promise<DNAProfile> {
       const { data, error } = await supabase
         .from('listening_history')
         .select(
-          'listened_seconds, completed, played_at, tracks!inner(genre, primary_mood_id, track_features(*), artists(name)), journeys(activity)'
+          // Mood metadata is optional on existing tracks schemas.
+          'listened_sec, completed, played_at, tracks!inner(*, track_features(*), artists(name)), journeys(activity)'
         )
         .eq('user_id', userId)
         .gte('played_at', since.toISOString())
-        .gt('listened_seconds', 0)
+        .gt('listened_sec', 0)
         .order('played_at', { ascending: false })
         .range(offset, offset + PAGE_SIZE - 1);
 

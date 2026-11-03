@@ -102,6 +102,35 @@ test('pending history is never sent as a different account', async()=>{
   assert.equal(calls[0].args.p_user_id,'user-a');
 });
 
+test('missing Supabase session reports unsaved history and retries after authentication', async()=>{
+  const {writer,calls,setUser}=writerFixture();
+  const statuses=[];writer.onStatus(value=>statuses.push(value));setUser(null);
+  writer.enqueue(record());await writer.flush();
+  assert.equal(calls.length,0);assert.match(statuses.at(-1),/không có phiên/);
+  setUser('user-a');await writer.flush();
+  assert.equal(calls.length,1);assert.equal(statuses.at(-1),null);
+  const count=statuses.length;await writer.flush();assert.equal(statuses.length,count);
+});
+
+test('backend account writes without Supabase auth, retains failed record and stable id on retry',async()=>{
+  const calls=[];let fail=true;
+  const {ListeningHistoryWriter}=loadModule('services/listening-history-service.ts',{
+    '../lib/supabase':{supabase:{auth:{getSession(){throw Error('must not use Supabase auth');}}}},
+  },{
+    localStorage:{getItem(key){return key==='moodflow_token'?'backend-token':JSON.stringify({id:'user-a'});}},
+    fetch:async(url,options)=>{
+      calls.push({url,options});
+      return {ok:!fail,json:async()=>fail?{success:false,error:'configuration required'}:{success:true,data:{recorded:true}}};
+    },
+  });
+  const writer=new ListeningHistoryWriter();const statuses=[];writer.onStatus(value=>statuses.push(value));
+  writer.enqueue(record());await writer.flush();assert.match(statuses.at(-1),/configuration required/);
+  fail=false;await writer.flush();assert.equal(statuses.at(-1),null);
+  assert.equal(calls.at(-1).options.headers.Authorization,'Bearer backend-token');
+  assert.equal(JSON.parse(calls.at(-1).options.body).playbackId,'listen-1');
+  const count=calls.length;await writer.flush();assert.equal(calls.length,count);
+});
+
 test('player service captures final position and records before queue replacement, end and stop', async()=>{
   const {tracker,records,setClock}=trackerFixture();const engines=[];
   const {PlayerService}=loadModule('services/player-service.ts',{'./audio-service':{audioSynth:{isSupported:false}},'./audio-engine':{

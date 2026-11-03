@@ -6,6 +6,7 @@ import { PlaybackProgress } from '@/services/audio-engine.types';
 import { ListeningContext, ListeningHistoryTracker } from '@/services/listening-history-tracker';
 import { ListeningHistoryWriter } from '@/services/listening-history-service';
 import { supabase } from '@/lib/supabase';
+import { getBackendSession } from '@/services/backend-session';
 import { AppState } from 'react-native';
 import { ensureGuestSession, guestSessionErrorMessage } from '@/services/guest-session';
 
@@ -50,6 +51,7 @@ interface PlayerContextValue {
   initializeLibrary: (tracks: Track[]) => void;
   historyError: string | null;
   historyEnabled: boolean;
+  historyRevision: number;
   retryHistory: () => Promise<void>;
   startGuestSession: () => Promise<void>;
   guestSessionLoading: boolean;
@@ -64,6 +66,7 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   const [service] = useState(() => new PlayerService(new ListeningHistoryTracker((record) => writer.enqueue(record))));
   const [historyError, setHistoryError] = useState<string | null>(null);
   const [historyEnabled, setHistoryEnabled] = useState(false);
+  const [historyRevision, setHistoryRevision] = useState(0);
   const [guestSessionLoading, setGuestSessionLoading] = useState(false);
   const [guestSessionError, setGuestSessionError] = useState<string | null>(null);
   const [queueEndCount, setQueueEndCount] = useState(0);
@@ -89,6 +92,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [service]);
 
   const loadEntry = useCallback(async (index: number, autoPlay: boolean) => {
+    const backendUser = getBackendSession()?.userId;
+    if (backendUser) { service.setHistoryUser(backendUser); setHistoryEnabled(true); }
     const entry = queueRef.current[index];
     if (!entry) return;
     const version = ++request.current;
@@ -114,14 +119,23 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     mounted.current = true;
-    const offHistory = writer.onStatus(setHistoryError);
+    const offHistory = writer.onStatus((message) => {
+      setHistoryError(message);
+      if (message === null) setHistoryRevision((version) => version + 1);
+    });
     const { data: authListener } = supabase.auth.onAuthStateChange((_event, session) => {
-      service.setHistoryUser(session?.user.id ?? null);
-      setHistoryEnabled(Boolean(session?.user.id));
+      const userId = getBackendSession()?.userId ?? session?.user.id ?? null;
+      service.setHistoryUser(userId);
+      setHistoryEnabled(Boolean(userId));
       if (session) setGuestSessionError(null);
       // Avoid awaiting another auth operation inside Supabase's auth callback.
       setTimeout(() => { void writer.flush(); }, 0);
     });
+    const backendUser = getBackendSession()?.userId;
+    if (backendUser) {
+      service.setHistoryUser(backendUser);
+      setHistoryEnabled(true);
+    }
     const appStateListener = AppState.addEventListener('change', (next) => {
       if (next === 'active') void writer.flush();
     });
@@ -156,6 +170,8 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
   }, [loadEntry, reportError, service, writer]);
 
   const play = useCallback(async () => {
+    const backendUser = getBackendSession()?.userId;
+    if (backendUser) { service.setHistoryUser(backendUser); setHistoryEnabled(true); }
     wantsPlay.current = true;
     setError(null);
     if (!service.hasTrack && !pendingLoad.current) {
@@ -269,11 +285,11 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
     elapsedSeconds: status.position,
     durationSeconds: status.duration,
     presetId, volume, error, play, pause, togglePlay, stop,
-    historyError, historyEnabled, retryHistory,
+    historyError, historyEnabled, historyRevision, retryHistory,
     startGuestSession, guestSessionLoading, guestSessionError,
     queueEndCount,
     setPreset, setVolume, seekTo, playTrack, previousTrack, nextTrack, initializeLibrary,
-  }), [queue, currentIndex, status, presetId, volume, error, play, pause, togglePlay, stop, setPreset, setVolume, seekTo, playTrack, previousTrack, nextTrack, initializeLibrary, historyError, historyEnabled, retryHistory, startGuestSession, guestSessionLoading, guestSessionError, queueEndCount]);
+  }), [queue, currentIndex, status, presetId, volume, error, play, pause, togglePlay, stop, setPreset, setVolume, seekTo, playTrack, previousTrack, nextTrack, initializeLibrary, historyError, historyEnabled, historyRevision, retryHistory, startGuestSession, guestSessionLoading, guestSessionError, queueEndCount]);
 
   return <PlayerContext.Provider value={value}>{children}</PlayerContext.Provider>;
 }

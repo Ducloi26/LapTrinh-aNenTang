@@ -7,29 +7,10 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { createClient } = require('@supabase/supabase-js');
 
-// 1. Tải cấu hình từ file .env (kiểm tra thư mục hiện tại hoặc thư mục cha)
-const localEnv = path.resolve(__dirname, '.env');
-const rootEnv = path.resolve(__dirname, '../.env');
-const envPath = fs.existsSync(localEnv) ? localEnv : rootEnv;
-let supabaseUrl = '';
-let supabaseAnonKey = '';
-let supabaseServiceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY || '';
-
-if (fs.existsSync(envPath)) {
-  const envContent = fs.readFileSync(envPath, 'utf8');
-  envContent.split('\n').forEach(line => {
-    const trimmed = line.trim();
-    if (trimmed.startsWith('EXPO_PUBLIC_SUPABASE_URL=')) {
-      supabaseUrl = trimmed.split('=')[1].trim();
-    }
-    if (trimmed.startsWith('EXPO_PUBLIC_SUPABASE_ANON_KEY=')) {
-      supabaseAnonKey = trimmed.split('=')[1].trim();
-    }
-    if (trimmed.startsWith('SUPABASE_SERVICE_ROLE_KEY=')) {
-      supabaseServiceRoleKey = trimmed.slice('SUPABASE_SERVICE_ROLE_KEY='.length).trim();
-    }
-  });
-}
+const config = require('./config').loadConfig();
+const supabaseUrl = config.SUPABASE_URL || config.EXPO_PUBLIC_SUPABASE_URL || '';
+const supabaseAnonKey = config.SUPABASE_ANON_KEY || config.EXPO_PUBLIC_SUPABASE_ANON_KEY || '';
+const supabaseServiceRoleKey = config.SUPABASE_SERVICE_ROLE_KEY || '';
 
 // 2. Khởi tạo Supabase client (dùng để lưu trữ CSDL)
 const supabase = (supabaseUrl && supabaseAnonKey) 
@@ -42,12 +23,13 @@ const supabaseAdmin = (supabaseUrl && supabaseServiceRoleKey)
   : null;
 
 const app = express();
-const PORT = process.env.PORT || 5000;
-const JWT_SECRET = process.env.JWT_SECRET || 'moodflow_jwt_secret_token_key_2026';
+const PORT = config.PORT || 5000;
+const JWT_SECRET = config.JWT_SECRET || 'moodflow_jwt_secret_token_key_2026';
 
 // 3. Middlewares
 app.use(cors());
 app.use(express.json());
+require('./listening-history-route')(app, { admin: supabaseAdmin, jwt, secret: JWT_SECRET });
 
 // Ghi log terminal đẹp mắt cho mỗi lượt gọi
 app.use((req, res, next) => {
@@ -833,8 +815,8 @@ app.get('/api/tracks', async (req, res) => {
  * Lấy lịch sử nghe của người dùng đã xác thực để tính Music DNA
  */
 app.get('/api/music-dna/:userId/listening-history', async (req, res) => {
-  if (!supabase) {
-    return res.status(500).json({ success: false, error: 'Chưa cấu hình Supabase Client.' });
+  if (!supabaseAdmin) {
+    return res.status(503).json({ success: false, error: 'Backend chưa có SUPABASE_SERVICE_ROLE_KEY để đọc lịch sử của tài khoản đăng nhập backend. Không thể kết luận tài khoản chưa có lịch sử.' });
   }
 
   const authHeader = req.headers.authorization;
@@ -860,12 +842,13 @@ app.get('/api/music-dna/:userId/listening-history', async (req, res) => {
     const records = [];
     const pageSize = 1000;
     for (let offset = 0; ; offset += pageSize) {
-      const { data, error } = await supabase
+      const { data, error } = await supabaseAdmin
         .from('listening_history')
-        .select('listened_seconds, completed, played_at, tracks!inner(genre, primary_mood_id, track_features(*), artists(name)), journeys(activity)')
+        // Read existing track fields without requiring optional mood metadata.
+        .select('listened_sec, completed, played_at, tracks!inner(*, track_features(*), artists(name)), journeys(activity)')
         .eq('user_id', decoded.id)
         .gte('played_at', since.toISOString())
-        .gt('listened_seconds', 0)
+        .gt('listened_sec', 0)
         .order('played_at', { ascending: false })
         .range(offset, offset + pageSize - 1);
 
@@ -891,7 +874,7 @@ app.put('/api/music-dna/:userId/listener-type', async (req, res) => {
   if (!supabaseAdmin) {
     return res.status(503).json({
       success: false,
-      error: 'Cần cấu hình SUPABASE_SERVICE_ROLE_KEY và chạy migration Music DNA listener type.',
+      error: 'Chưa cấu hình Supabase admin trên backend. Kiểm tra URL dự án và SUPABASE_SERVICE_ROLE_KEY để lưu hồ sơ người nghe.',
     });
   }
 

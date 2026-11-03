@@ -1,10 +1,11 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, View, Text, StyleSheet } from 'react-native';
+import { ActivityIndicator, View, Text, StyleSheet, Pressable } from 'react-native';
 import { COLORS } from '@/constants/moodflow';
 import SectionTitle from '@/components/moodflow/shared/SectionTitle';
 import RadarChart from '@/components/moodflow/music-dna/RadarChart';
 import DonutChart from '@/components/moodflow/music-dna/DonutChart';
 import DnaSlider from '@/components/moodflow/music-dna/DnaSlider';
+import { usePlayer } from '@/contexts/PlayerContext';
 import {
   computeDNA,
   createDefaultDNA,
@@ -113,7 +114,9 @@ export default function MusicDNAPage({
   preferencesLoadError,
   onPreferencesChange,
 }: MusicDNAPageProps) {
+  const { historyRevision, historyEnabled, historyError } = usePlayer();
   const [profile, setProfile] = useState<DNAProfile>(createDefaultDNA);
+  const [refreshVersion, setRefreshVersion] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [preferencesStatus, setPreferencesStatus] = useState<string | null>(null);
@@ -165,7 +168,7 @@ export default function MusicDNAPage({
     return () => {
       active = false;
     };
-  }, [userId]);
+  }, [userId, refreshVersion, historyRevision]);
 
   useEffect(() => {
     if (!preferencesReady) return;
@@ -234,6 +237,19 @@ export default function MusicDNAPage({
         subtitle="Khám phá 5 nét trong gu nghe nhạc của bạn, được tính từ lịch sử nghe 30 ngày gần nhất."
       />
 
+      <Pressable accessibilityRole="button" disabled={loading}
+        onPress={() => setRefreshVersion((version) => version + 1)}>
+        <Text style={styles.noticeText}>{loading ? 'Đang tải...' : '↻ Làm mới Music DNA'}</Text>
+      </Pressable>
+
+      {!historyEnabled && (
+        <View style={[styles.notice, styles.errorNotice]}>
+          <Text style={styles.noticeText}>
+            Trình phát chưa nhận được tài khoản để lưu lịch sử. Hãy đăng nhập và phát lại bài.
+          </Text>
+        </View>
+      )}
+      {historyError && <Text style={styles.noticeText}>{historyError}</Text>}
       {error ? (
         <View style={[styles.notice, styles.errorNotice]}>
           <Text style={styles.noticeText}>{error}</Text>

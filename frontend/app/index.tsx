@@ -105,7 +105,7 @@ export default function MoodFlowMain() {
     }
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
+      if (session?.user && !(typeof localStorage !== 'undefined' && localStorage.getItem('moodflow_token'))) {
         setAuthed(true);
         if (session.user.id) setUserId(session.user.id);
         getCurrentUserProfile().then((prof) => {
@@ -117,7 +117,7 @@ export default function MoodFlowMain() {
     const {
       data: { subscription },
     } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
+      if (session?.user && !(typeof localStorage !== 'undefined' && localStorage.getItem('moodflow_token'))) {
         setAuthed(true);
         if (session.user.id) setUserId(session.user.id);
         getCurrentUserProfile().then((prof) => {
