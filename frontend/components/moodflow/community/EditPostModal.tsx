@@ -12,11 +12,14 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '@/constants/moodflow';
 import Icon from '@/components/moodflow/shared/Icon';
 
+import { ApiError, request } from '@/services/api-client';
+
 interface EditPostModalProps {
   visible: boolean;
   post: any | null;
   onClose: () => void;
   onUpdateSuccess: () => void;
+  onUnavailable: (message: string) => void;
 }
 
 export default function EditPostModal({
@@ -24,52 +27,36 @@ export default function EditPostModal({
   post,
   onClose,
   onUpdateSuccess,
+  onUnavailable,
 }: EditPostModalProps) {
   const [caption, setCaption] = useState('');
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  const scope = React.useRef<AbortController | null>(null);
   useEffect(() => {
-    if (post) {
-      setCaption(post.caption || '');
-      setErrorMsg(null);
-    }
+    const controller = new AbortController();
+    scope.current = controller;
+    setCaption(post?.caption || ''); setErrorMsg(null); setSubmitting(false);
+    return () => controller.abort();
   }, [post, visible]);
 
   const handleUpdate = async () => {
-    if (!caption.trim()) {
-      setErrorMsg('Nội dung bài viết không được để trống.');
-      return;
-    }
-    if (!post) return;
-
+    const signal = scope.current?.signal;
+    if (!post || !signal || signal.aborted || submitting) return;
+    if (!caption.trim()) { setErrorMsg('Nội dung bài viết không được để trống.'); return; }
+    setSubmitting(true); setErrorMsg(null);
     try {
-      setSubmitting(true);
-      setErrorMsg(null);
-      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_token') : null;
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch(`http://localhost:5000/api/community/posts/${post.id}`, {
-        method: 'PUT',
-        headers,
-        body: JSON.stringify({
-          caption: caption.trim(),
-        }),
+      await request('/community/posts/' + encodeURIComponent(post.id), {
+        method: 'PUT', signal, body: JSON.stringify({ caption: caption.trim() }),
       });
-
-      const data = await res.json();
-      if (data.success) {
-        onUpdateSuccess();
-        onClose();
-      } else {
-        setErrorMsg(data.error || 'Có lỗi xảy ra khi cập nhật.');
-      }
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Không thể kết nối đến máy chủ.');
-    } finally {
-      setSubmitting(false);
-    }
+      if (!signal.aborted) { onUpdateSuccess(); onClose(); }
+    } catch (error) {
+      if (signal.aborted) return;
+      const message = error instanceof Error ? error.message : 'Không cập nhật được bài.';
+      if (error instanceof ApiError && (error.status === 404 || error.status >= 500)) onUnavailable(message);
+      else setErrorMsg(message);
+    } finally { if (!signal.aborted) setSubmitting(false); }
   };
 
   if (!post) return null;

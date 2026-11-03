@@ -11,7 +11,7 @@ import { COLORS, GradientColors } from '@/constants/moodflow';
 import { validateRegister } from '@/utils/validation';
 import Field from '@/components/moodflow/Field';
 import PasswordStrength from '@/components/moodflow/PasswordStrength';
-import { supabase } from '@/lib/supabase';
+import { saveSession } from '@/services/api-client';
 
 interface Props {
   moodColors: GradientColors;
@@ -25,7 +25,6 @@ export default function RegisterForm({ moodColors, onSwitchToLogin, onRegisterSu
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [agree, setAgree] = useState(false);
-  const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
 
@@ -54,10 +53,7 @@ export default function RegisterForm({ moodColors, onSwitchToLogin, onRegisterSu
       }
 
       // 2. Lưu JWT Token và hồ sơ người dùng cục bộ
-      if (data.token && typeof localStorage !== 'undefined') {
-        localStorage.setItem('moodflow_token', data.token);
-        localStorage.setItem('moodflow_user', JSON.stringify(data.user));
-      }
+      await saveSession(data.token, data.user);
 
       onRegisterSuccess(data.user?.displayName || name);
     } catch (err: any) {
@@ -108,7 +104,7 @@ export default function RegisterForm({ moodColors, onSwitchToLogin, onRegisterSu
         error={errors.password}
         inputProps={{
           placeholder: '••••••••',
-          secureTextEntry: !showPassword,
+          secureTextEntry: true,
           value: password,
           onChangeText: setPassword,
         }}

@@ -5,7 +5,6 @@ import {
   StyleSheet,
   Pressable,
   ActivityIndicator,
-  ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, moodById } from '@/constants/moodflow';
@@ -15,6 +14,7 @@ import HourlyAreaChart from '@/components/moodflow/statistics/HourlyAreaChart';
 import WeeklyBarChart from '@/components/moodflow/statistics/WeeklyBarChart';
 import DonutChart from '@/components/moodflow/music-dna/DonutChart';
 import SessionFeedbackModal from '@/components/moodflow/statistics/SessionFeedbackModal';
+import { getJourneyStatistics } from '@/services/journey-service';
 
 interface StatisticsPageProps {
   userId?: string;
@@ -30,6 +30,7 @@ export default function StatisticsPage({
   const [loading, setLoading] = useState<boolean>(true);
   const [statsData, setStatsData] = useState<any>(null);
   const [feedbackModalOpen, setFeedbackModalOpen] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Màu sắc phân bổ Mood chuẩn
   const DONUT_COLORS = ['#22D3EE', '#8B5CF6', '#F43F5E', '#F59E0B', '#10B981'];
@@ -37,13 +38,11 @@ export default function StatisticsPage({
   const fetchStats = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`http://localhost:5000/api/stats?userId=${userId}`);
-      const json = await res.json();
-      if (json.success && json.data) {
-        setStatsData(json.data);
-      }
+      setError(null);
+      setStatsData(await getJourneyStatistics());
     } catch (err) {
-      console.error('Lỗi tải thống kê:', err);
+      setStatsData(null);
+      setError(err instanceof Error ? err.message : 'Không tải được thống kê.');
     } finally {
       setLoading(false);
     }
@@ -52,6 +51,16 @@ export default function StatisticsPage({
   useEffect(() => {
     fetchStats();
   }, [userId]);
+
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <SectionTitle title="Thống kê Sức khỏe Tinh thần" />
+        <Text style={{ color: COLORS.danger }}>{error}</Text>
+        <Pressable onPress={fetchStats}><Text style={{ color: COLORS.text }}>Thử lại</Text></Pressable>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
@@ -214,7 +223,7 @@ export default function StatisticsPage({
                       </View>
 
                       {e.feedback_note ? (
-                        <Text style={styles.evalNoteText}>"{e.feedback_note}"</Text>
+                        <Text style={styles.evalNoteText}>“{e.feedback_note}”</Text>
                       ) : null}
                     </View>
                   );

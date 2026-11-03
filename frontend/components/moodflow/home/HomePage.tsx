@@ -14,6 +14,7 @@ import {
   moodById,
   Mood,
   Activity,
+  JourneySelection,
 } from '@/constants/moodflow';
 import { getMoodsFromBackend, getActivitiesFromBackend } from '@/services/mood-service';
 import SectionTitle from '@/components/moodflow/shared/SectionTitle';
@@ -30,6 +31,10 @@ interface HomePageProps {
   onOpenAI?: () => void;
   aiReady: boolean;
   userName?: string;
+  defaultsReady?: boolean;
+  defaultsError?: string | null;
+  onApplyDefaults?: () => void;
+  onRetryDefaults?: () => void;
 }
 
 export default function HomePage({
@@ -39,22 +44,28 @@ export default function HomePage({
   onOpenAI,
   aiReady,
   userName,
+  defaultsReady,
+  defaultsError,
+  onApplyDefaults,
+  onRetryDefaults,
 }: HomePageProps) {
   const [moodList, setMoodList] = React.useState<Mood[]>(MOODS);
   const [actList, setActList] = React.useState<Activity[]>(ACTIVITIES);
 
   React.useEffect(() => {
     // Tự động đồng bộ danh mục từ Backend Express mỗi khi vào trang chủ
+    let active = true;
     getMoodsFromBackend().then((res) => {
-      if (res && res.length > 0) setMoodList(res);
+      if (active) setMoodList(res);
     });
     getActivitiesFromBackend().then((res) => {
-      if (res && res.length > 0) setActList(res);
+      if (active) setActList(res);
     });
+    return () => { active = false; };
   }, []);
 
-  const currentMood = moodById(state.moodFrom);
-  const goalMood = moodById(state.moodTo);
+  const currentMood = moodList.find((m) => m.id === state.moodFrom) ?? moodById(state.moodFrom);
+  const goalMood = moodList.find((m) => m.id === state.moodTo) ?? moodById(state.moodTo);
 
   return (
     <View style={styles.container}>
@@ -66,6 +77,16 @@ export default function HomePage({
         <Text style={styles.greetingSub}>
           Hôm nay tâm trí bạn đang tìm kiếm giai điệu như thế nào?
         </Text>
+      </View>
+
+      <View style={{ alignItems: 'flex-start', gap: 8, marginBottom: 20 }}>
+        <GhostButton onClick={onApplyDefaults} disabled={!defaultsReady}>Áp dụng gu mặc định</GhostButton>
+        {defaultsError ? (
+          <>
+            <Text style={{ color: COLORS.danger }}>{defaultsError}</Text>
+            <GhostButton onClick={onRetryDefaults}>Tải lại gu mặc định</GhostButton>
+          </>
+        ) : null}
       </View>
 
       {/* Thanh gọi nhanh Trợ lý AI Assistant */}
@@ -84,7 +105,7 @@ export default function HomePage({
               <View style={{ flex: 1 }}>
                 <Text style={styles.aiQuickTitle}>Trợ lý Âm nhạc Thông minh (MoodFlow AI)</Text>
                 <Text style={styles.aiQuickSub} numberOfLines={1}>
-                  Ví dụ: "Hôm nay deadline nhiều mệt mỏi", "Vừa chia tay cần tĩnh tâm"...
+                  Ví dụ: “Hôm nay deadline nhiều mệt mỏi”, “Vừa chia tay cần tĩnh tâm”…
                 </Text>
               </View>
             </View>

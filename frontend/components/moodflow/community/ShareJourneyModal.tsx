@@ -12,6 +12,9 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS } from '@/constants/moodflow';
 import Icon from '@/components/moodflow/shared/Icon';
+import { SavedJourney, getSavedJourneys } from '@/services/journey-service';
+
+import { request } from '@/services/api-client';
 
 interface ShareJourneyModalProps {
   visible: boolean;
@@ -26,85 +29,46 @@ export default function ShareJourneyModal({
   onClose,
   onPostSuccess,
   userId = 'guest',
-  userName = 'Thành viên MoodFlow',
 }: ShareJourneyModalProps) {
   const [caption, setCaption] = useState('');
-  const [journeys, setJourneys] = useState<any[]>([]);
-  const [selectedJourney, setSelectedJourney] = useState<any | null>(null);
+  const [journeys, setJourneys] = useState<SavedJourney[]>([]);
+  const [selectedJourney, setSelectedJourney] = useState<SavedJourney | null>(null);
   const [loadingJourneys, setLoadingJourneys] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Tải danh sách hành trình của bạn từ CSDL
+  const scope = React.useRef<AbortController | null>(null);
   useEffect(() => {
+    const controller = new AbortController();
+    scope.current = controller;
+    setSubmitting(false);
     if (visible) {
-      setErrorMsg(null);
-      setCaption('');
-      setLoadingJourneys(true);
-      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_token') : null;
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      fetch('http://localhost:5000/api/journeys/my', { headers })
-        .then((res) => res.json())
-        .then((data) => {
-          if (data.success && Array.isArray(data.data) && data.data.length > 0) {
-            setJourneys(data.data);
-            setSelectedJourney(data.data[0]); // Mặc định chọn hành trình đầu tiên
-          } else {
-            setJourneys([]);
-            setSelectedJourney(null);
-          }
-        })
-        .catch((err) => {
-          console.error('Lỗi tải hành trình:', err);
-        })
-        .finally(() => {
-          setLoadingJourneys(false);
-        });
+      setErrorMsg(null); setCaption(''); setJourneys([]); setSelectedJourney(null); setLoadingJourneys(true);
+      getSavedJourneys(controller.signal).then((saved) => {
+        if (controller.signal.aborted) return;
+        const allowed = saved.filter((item) => item.is_public === true);
+        setJourneys(allowed); setSelectedJourney(allowed[0] || null);
+      }).catch((error) => {
+        if (!controller.signal.aborted) setErrorMsg(error instanceof Error ? error.message : 'Không tải được thư viện.');
+      }).finally(() => { if (!controller.signal.aborted) setLoadingJourneys(false); });
     }
-  }, [visible]);
+    return () => controller.abort();
+  }, [visible, userId]);
 
   const handleSubmit = async () => {
-    if (!caption.trim()) {
-      setErrorMsg('Vui lòng viết đôi dòng cảm nhận hoặc chia sẻ trải nghiệm của bạn!');
-      return;
+    const signal = scope.current?.signal;
+    if (!signal || signal.aborted || submitting) return;
+    if (!caption.trim() || !selectedJourney) {
+      setErrorMsg('Viết lời chia sẻ và chọn journey đã cho phép chia sẻ.'); return;
     }
-    if (!selectedJourney) {
-      setErrorMsg('Bạn chưa có hành trình nào để chia sẻ. Hãy tạo hành trình ở Trang chủ trước nhé!');
-      return;
-    }
-
+    setSubmitting(true); setErrorMsg(null);
     try {
-      setSubmitting(true);
-      setErrorMsg(null);
-      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_token') : null;
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch('http://localhost:5000/api/community/posts', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          caption: caption.trim(),
-          journey: selectedJourney,
-          userId,
-          authorName: userName,
-        }),
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        onPostSuccess();
-        onClose();
-      } else {
-        setErrorMsg(data.error || 'Có lỗi xảy ra khi đăng bài.');
-      }
-    } catch (err: any) {
-      setErrorMsg(err.message || 'Không thể kết nối đến máy chủ.');
-    } finally {
-      setSubmitting(false);
-    }
+      await request('/community/posts', { method: 'POST', signal,
+        body: JSON.stringify({ caption: caption.trim(), journeyId: selectedJourney.id }) });
+      if (!signal.aborted) { onPostSuccess(); onClose(); }
+    } catch (error) {
+      if (!signal.aborted) setErrorMsg(error instanceof Error ? error.message : 'Không đăng được bài.');
+    } finally { if (!signal.aborted) setSubmitting(false); }
   };
 
   return (
@@ -123,7 +87,7 @@ export default function ShareJourneyModal({
           </View>
 
           <ScrollView style={styles.scrollBody} showsVerticalScrollIndicator={false}>
-            {/* Lời nhắn / Caption */}
+            <Text style={styles.inputLabel}>Đăng bài sẽ chia sẻ tiêu đề, Mood, hoạt động, thời lượng và danh sách bài hát. Bài đã thu hồi cần được đăng lại bằng bài mới.</Text>
             <Text style={styles.inputLabel}>Cảm xúc & Câu chuyện của bạn:</Text>
             <TextInput
               style={styles.textInput}
@@ -148,7 +112,7 @@ export default function ShareJourneyModal({
             ) : journeys.length === 0 ? (
               <View style={styles.emptyJourneyBox}>
                 <Text style={styles.emptyJourneyText}>
-                  Bạn chưa có hành trình nào trong CSDL. Hãy tạo hành trình ở Trang chủ trước khi chia sẻ nhé!
+                  Chưa có journey cho phép chia sẻ. Mở Journey hoặc Thư viện và đổi quyền trước khi đăng bài.
                 </Text>
               </View>
             ) : (

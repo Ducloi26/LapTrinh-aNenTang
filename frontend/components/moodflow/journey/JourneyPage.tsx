@@ -1,31 +1,28 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, Track, moodById } from '@/constants/moodflow';
+import { COLORS, Track, JourneySelection } from '@/constants/moodflow';
 import Icon from '@/components/moodflow/shared/Icon';
 import MusicCard from '@/components/moodflow/journey/MusicCard';
+import JourneyPrivacyControl from '@/components/moodflow/journey/JourneyPrivacyControl';
 import { Journey, Stage, fmtMin } from '@/services/journey-generator';
+import { deleteJourney, saveJourney } from '@/services/journey-service';
 
 interface JourneyPageProps {
   journey: Journey | null;
-  state: {
-    moodFrom: string;
-    moodTo: string;
-  };
+  state: JourneySelection;
   onPlayTrack: (track: Track, stage: Stage, stageIndex: number) => void;
+  onJourneyChange: (journey: Journey) => void;
 }
 
 export default function JourneyPage({
   journey,
-  state,
   onPlayTrack,
+  onJourneyChange,
 }: JourneyPageProps) {
-  const [saved, setSaved] = useState(true);
-  const [savedId, setSavedId] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<string | null>(null);
-  const from = moodById(state.moodFrom);
-  const to = moodById(state.moodTo);
+  const saved = !!journey?.id;
 
   if (!journey) {
     return (
@@ -33,12 +30,15 @@ export default function JourneyPage({
         <Icon name="sparkles" size={32} color={COLORS.faint} />
         <Text style={styles.emptyTitle}>Chưa có hành trình nào</Text>
         <Text style={styles.emptySub}>
-          Quay lại Trang chủ, chọn tâm trạng và nhấn "Tạo Music Journey của tôi"
+          Quay lại Trang chủ, chọn tâm trạng và nhấn “Tạo Music Journey của tôi”
           để bắt đầu.
         </Text>
       </View>
     );
   }
+
+  const from = journey.moodFrom;
+  const to = journey.moodTo;
 
   const handlePlayAll = () => {
     // Phát bài đầu tiên của giai đoạn đầu tiên
@@ -49,70 +49,20 @@ export default function JourneyPage({
   };
 
   const handleToggleSave = async () => {
-    if (saving) return;
-
-    if (saved && savedId) {
-      // Đã lưu -> Xóa khỏi CSDL
-      try {
-        setSaving(true);
-        await fetch(`http://localhost:5000/api/journeys/${savedId}`, {
-          method: 'DELETE',
-        });
-        setSaved(false);
-        setSavedId(null);
-        setFeedback('Đã bỏ lưu hành trình');
-        setTimeout(() => setFeedback(null), 2500);
-      } catch (err) {
-        console.error('Lỗi bỏ lưu hành trình:', err);
-      } finally {
-        setSaving(false);
-      }
-      return;
-    }
-
-    // Chưa lưu -> Gửi lên Backend POST /api/journeys
+    if (saving || journey.saveStatus === 'saving') return;
+    setSaving(true);
+    setFeedback(null);
     try {
-      setSaving(true);
-      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_token') : null;
-      const savedUserStr = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_user') : null;
-      let currentUserId = 'guest';
-      if (savedUserStr) {
-        try {
-          const u = JSON.parse(savedUserStr);
-          if (u?.id) currentUserId = u.id;
-        } catch (e) {}
+      if (journey.id) {
+        await deleteJourney(journey.id);
+        onJourneyChange({ ...journey, id: undefined, saveStatus: undefined, saveError: undefined });
+        setFeedback('Đã bỏ lưu hành trình');
+      } else {
+        onJourneyChange(await saveJourney(journey));
+        setFeedback('Đã lưu hành trình vào thư viện trên DB.');
       }
-
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch('http://localhost:5000/api/journeys', {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          title: `${from.emoji} ${from.label} ➔ ${to.emoji} ${to.label}`,
-          moodFrom: from,
-          moodTo: to,
-          activity: journey.activityLabel || state.moodFrom,
-          duration: journey.totalMin,
-          stages: journey.stages,
-          userId: currentUserId,
-        }),
-      });
-
-      const data = await res.json();
-      if (data.success && data.journey) {
-        setSaved(true);
-        setSavedId(data.journey.id);
-        setFeedback('✨ Đã lưu hành trình vào mục "Nhạc của tôi"!');
-        setTimeout(() => setFeedback(null), 3000);
-      }
-    } catch (err) {
-      console.error('Lỗi lưu hành trình lên backend:', err);
-      // Fallback lưu local tạm thời
-      setSaved(true);
-      setFeedback('Đã lưu hành trình!');
-      setTimeout(() => setFeedback(null), 2500);
+    } catch (error) {
+      setFeedback(error instanceof Error ? error.message : 'Không thể lưu thay đổi.');
     } finally {
       setSaving(false);
     }
@@ -120,6 +70,11 @@ export default function JourneyPage({
 
   return (
     <View style={styles.container}>
+      {journey.id && journey.saveStatus === 'saved' && journey.shareVersion !== undefined && (
+        <JourneyPrivacyControl key={journey.id} id={journey.id}
+          privacy={{ is_public: journey.isPublic === true, share_version: journey.shareVersion }}
+          onChanged={(value) => onJourneyChange({ ...journey, isPublic: value.is_public, shareVersion: value.share_version })} />
+      )}
       {/* Header */}
       <View style={styles.header}>
         <View style={styles.headerBadge}>
@@ -167,7 +122,7 @@ export default function JourneyPage({
 
           <Pressable
             onPress={handleToggleSave}
-            disabled={saving}
+            disabled={saving || journey.saveStatus === 'saving'}
             style={[styles.saveBtn, saved && styles.saveBtnActive]}
           >
             <Icon
@@ -176,14 +131,14 @@ export default function JourneyPage({
               color={saved ? '#22D3EE' : COLORS.text}
             />
             <Text style={[styles.saveBtnText, saved && { color: '#22D3EE' }]}>
-              {saving ? 'Đang lưu...' : saved ? 'Đã lưu vào Thư viện' : 'Lưu hành trình'}
+              {saving || journey.saveStatus === 'saving' ? 'Đang lưu...' : saved ? 'Đã lưu vào Thư viện' : 'Lưu hành trình'}
             </Text>
           </Pressable>
         </View>
 
-        {feedback ? (
+        {feedback || journey.saveError ? (
           <View style={styles.feedbackBanner}>
-            <Text style={styles.feedbackText}>{feedback}</Text>
+            <Text style={styles.feedbackText}>{feedback || journey.saveError}</Text>
           </View>
         ) : null}
       </View>

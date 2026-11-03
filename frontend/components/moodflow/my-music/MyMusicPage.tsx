@@ -1,11 +1,14 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, TRACK_POOL, Track, moodById } from '@/constants/moodflow';
+import { COLORS, TRACK_POOL, Track } from '@/constants/moodflow';
 import SectionTitle from '@/components/moodflow/shared/SectionTitle';
 import GhostButton from '@/components/moodflow/shared/GhostButton';
 import MusicCard from '@/components/moodflow/journey/MusicCard';
 import Icon from '@/components/moodflow/shared/Icon';
+import JourneyPrivacyControl from '@/components/moodflow/journey/JourneyPrivacyControl';
+import { request } from '@/services/api-client';
+import { SavedJourney, deleteJourney, getSavedJourneys, restoreJourney } from '@/services/journey-service';
 
 const TABS = [
   { id: 'journeys', label: '🎼 Journey của tôi' },
@@ -14,23 +17,6 @@ const TABS = [
   { id: 'playlists', label: '📂 Playlist' },
   { id: 'history', label: '🕒 Lịch sử nghe' },
 ];
-
-interface SavedJourney {
-  id: string;
-  title: string;
-  duration_minutes: number;
-  mood_from?: string;
-  mood_to?: string;
-  activity?: string;
-  stages?: Array<{
-    key: string;
-    title: string;
-    emoji: string;
-    range: string;
-    tracks: Track[];
-  }>;
-  created_at?: string;
-}
 
 interface MyMusicPageProps {
   onPlayTrack?: (t: Track) => void;
@@ -48,22 +34,17 @@ export default function MyMusicPage({
   const [likedTracks, setLikedTracks] = useState<Track[]>([]);
   const [loading, setLoading] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   // 1. Tải danh sách Journey đã lưu từ CSDL Backend
   const fetchJourneys = async () => {
     try {
       setLoading(true);
-      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_token') : null;
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch('http://localhost:5000/api/journeys/my', { headers });
-      const data = await res.json();
-      if (data.success && Array.isArray(data.data)) {
-        setJourneys(data.data);
-      }
+      setError(null);
+      setJourneys(await getSavedJourneys());
     } catch (err) {
-      console.error('Lỗi tải danh sách hành trình:', err);
+      setJourneys([]);
+      setError(err instanceof Error ? err.message : 'Không tải được thư viện.');
     } finally {
       setLoading(false);
     }
@@ -72,13 +53,8 @@ export default function MyMusicPage({
   // 2. Tải danh sách bài hát đã thích từ CSDL Backend
   const fetchLikedTracks = async () => {
     try {
-      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_token') : null;
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch('http://localhost:5000/api/tracks/liked', { headers });
-      const data = await res.json();
-      if (data.success && Array.isArray(data.data)) {
+      const data = await request<{ data: Track[] }>('/tracks/liked');
+      if (Array.isArray(data.data)) {
         setLikedTracks(data.data);
       }
     } catch (err) {
@@ -95,56 +71,22 @@ export default function MyMusicPage({
   const handleDeleteJourney = async (id: string) => {
     try {
       setDeletingId(id);
-      await fetch(`http://localhost:5000/api/journeys/${id}`, {
-        method: 'DELETE',
-      });
+      setError(null);
+      await deleteJourney(id);
       setJourneys((prev) => prev.filter((j) => j.id !== id));
     } catch (err) {
-      console.error('Lỗi xóa hành trình:', err);
+      setError(err instanceof Error ? err.message : 'Không xóa được hành trình.');
     } finally {
       setDeletingId(null);
     }
   };
 
   // Xử lý phát toàn bộ hành trình đã lưu
-  const handlePlayJourney = (savedJ: SavedJourney) => {
-    if (onSelectJourney) {
-      // Chuẩn hóa định dạng Journey để index.tsx có thể nhận dạng
-      const formattedJourney = {
-        totalMin: savedJ.duration_minutes || 30,
-        activityLabel: savedJ.activity || 'Trị liệu tâm lý',
-        stages: savedJ.stages || [
-          {
-            key: 'acknowledge',
-            title: 'Khởi đầu & Thấu cảm',
-            emoji: '🌱',
-            range: '0 - 6 phút',
-            tracks: [TRACK_POOL.acknowledge?.[0]],
-          },
-          {
-            key: 'transition',
-            title: 'Chuyển tiếp',
-            emoji: '🌊',
-            range: '6 - 15 phút',
-            tracks: [TRACK_POOL.transition?.[0]],
-          },
-          {
-            key: 'elevate',
-            title: 'Nâng đỡ',
-            emoji: '✨',
-            range: '15 - 24 phút',
-            tracks: [TRACK_POOL.elevate?.[0]],
-          },
-          {
-            key: 'transcendence',
-            title: 'Thăng hoa & An định',
-            emoji: '🌌',
-            range: '24 - 30 phút',
-            tracks: [TRACK_POOL.transcendence?.[0]],
-          },
-        ],
-      };
-      onSelectJourney(formattedJourney);
+  const handlePlayJourney = (savedJourney: SavedJourney) => {
+    try {
+      onSelectJourney?.(restoreJourney(savedJourney));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Không mở được hành trình.');
     }
   };
 
@@ -169,6 +111,7 @@ export default function MyMusicPage({
   return (
     <View style={styles.container}>
       <SectionTitle title="Thư viện & Nhạc của tôi" />
+      {error ? <Text style={{ color: COLORS.danger }}>{error}</Text> : null}
 
       {/* Stats row */}
       <View style={styles.statsRow}>
@@ -216,7 +159,7 @@ export default function MyMusicPage({
               <Icon name="bookmark" size={32} color={COLORS.faint} />
               <Text style={styles.emptyTitle}>Chưa có Hành trình nào được lưu</Text>
               <Text style={styles.emptySub}>
-                Bạn có thể tạo một Music Journey ở Trang chủ, sau đó bấm nút "Lưu hành trình" để lưu lại vào CSDL và nghe lại bất cứ lúc nào.
+                Bạn có thể tạo một Music Journey ở Trang chủ, sau đó bấm nút “Lưu hành trình” để lưu lại vào CSDL và nghe lại bất cứ lúc nào.
               </Text>
               {onGoToHome ? (
                 <Pressable onPress={onGoToHome} style={styles.createBtn}>
@@ -272,6 +215,9 @@ export default function MyMusicPage({
                       </Pressable>
                     </View>
                   </View>
+
+                  <JourneyPrivacyControl id={j.id} privacy={j}
+                    onChanged={(value) => setJourneys((current) => current.map((item) => item.id === j.id ? { ...item, ...value } : item))} />
 
                   {/* 4 Giai đoạn tóm tắt */}
                   {j.stages && Array.isArray(j.stages) && (

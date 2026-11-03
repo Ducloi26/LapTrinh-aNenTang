@@ -3,6 +3,8 @@ import { View, Text, Image, Pressable, StyleSheet } from 'react-native';
 import { COLORS, Track } from '@/constants/moodflow';
 import Icon from '@/components/moodflow/shared/Icon';
 
+import { request } from '@/services/api-client';
+
 interface MusicCardProps {
   track: Track;
   onPlay: () => void;
@@ -18,21 +20,22 @@ export default function MusicCard({
 }: MusicCardProps) {
   const [liked, setLiked] = useState(initialLiked);
   const [loadingLike, setLoadingLike] = useState(false);
+  const [likeError, setLikeError] = useState<string | null>(null);
 
   const handleToggleLike = async () => {
-    const nextState = !liked;
-    setLiked(nextState);
-    if (onToggleLike) onToggleLike(track, nextState);
+    if (loadingLike) return;
 
     try {
       setLoadingLike(true);
-      await fetch('http://localhost:5000/api/tracks/like', {
+      setLikeError(null);
+      const result = await request<{ liked: boolean }>('/tracks/like', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ track }),
       });
+      setLiked(result.liked);
+      onToggleLike?.(track, result.liked);
     } catch (err) {
-      console.error('Lỗi lưu thích bài hát:', err);
+      setLikeError(err instanceof Error ? err.message : 'Không lưu được bài thích.');
     } finally {
       setLoadingLike(false);
     }
@@ -40,6 +43,7 @@ export default function MusicCard({
 
   return (
     <View style={styles.card}>
+      {likeError && <Text accessibilityRole="alert" style={{ color: COLORS.danger }}>{likeError}</Text>}
       {/* Cover Art */}
       <View style={styles.coverWrap}>
         {track.cover ? (
@@ -98,7 +102,7 @@ export default function MusicCard({
 
         {/* Reason */}
         {track.reason ? (
-          <Text style={styles.reasonText}>"{track.reason}"</Text>
+          <Text style={styles.reasonText}>“{track.reason}”</Text>
         ) : null}
       </View>
     </View>

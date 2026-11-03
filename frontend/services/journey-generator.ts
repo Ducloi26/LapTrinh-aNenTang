@@ -21,11 +21,18 @@ export interface Stage {
 }
 
 export interface Journey {
+  id?: string;
+  title?: string;
   stages: Stage[];
   totalMin: number;
   moodFrom: Mood;
   moodTo: Mood;
   activityLabel: string;
+  activityId?: ActivityId;
+  saveStatus?: 'saving' | 'saved' | 'error';
+  saveError?: string;
+  isPublic?: boolean;
+  shareVersion?: number;
 }
 
 export function fmtMin(total: number): string {
@@ -76,9 +83,14 @@ export function generateJourney(params: {
   moodTo: Mood;
   activity: ActivityId;
   duration: DurationMinutes;
+  tracks?: Track[];
 }): Journey {
   const { moodFrom, moodTo, activity, duration } = params;
   const totalSeconds = duration * 60;
+  const activityConfig = ACTIVITIES.find((item) => item.id === activity)!;
+  const catalog = params.tracks?.filter((track) => track.id);
+  const matching = catalog?.filter((track) => track.bpm !== undefined
+    && track.bpm >= activityConfig.bpmRange[0] && track.bpm <= activityConfig.bpmRange[1]);
   let t = 0;
 
   const stages: Stage[] = JOURNEY_4_STAGES.map((tpl, i) => {
@@ -88,7 +100,10 @@ export function generateJourney(params: {
     const stageMin = stageSeconds / 60;
     const start = t;
     t += stageSeconds;
-    const pool = TRACK_POOL[tpl.pool] || TRACK_POOL.acknowledge;
+    const targetEnergy = moodFrom.targetEnergy + (moodTo.targetEnergy - moodFrom.targetEnergy) * i / 3;
+    const pool = catalog?.length
+      ? [...(matching?.length ? matching : catalog)].sort((a, b) => Math.abs(a.energy - targetEnergy) - Math.abs(b.energy - targetEnergy))
+      : TRACK_POOL[tpl.pool] || TRACK_POOL.acknowledge;
     
     // Mỗi giai đoạn chọn từ 1 đến 2 bài hát phù hợp thời lượng
     const trackCount = Math.max(1, Math.min(pool.length, Math.round(stageMin / 10)));
@@ -124,5 +139,6 @@ export function generateJourney(params: {
     moodFrom,
     moodTo,
     activityLabel: act ? act.label : 'Tự do',
+    activityId: activity,
   };
 }

@@ -10,15 +10,26 @@ import {
   ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, MOODS, moodById } from '@/constants/moodflow';
+import { COLORS, MOODS, MoodId, isMoodId, isDurationMinutes, moodById } from '@/constants/moodflow';
 import Icon from '@/components/moodflow/shared/Icon';
+
+import { request } from '@/services/api-client';
 
 interface SessionFeedbackModalProps {
   visible: boolean;
   onClose: () => void;
   onFeedbackSubmitted?: () => void;
   userId?: string;
-  journey?: any;
+  journey?: {
+    id?: string;
+    title?: string;
+    moodFrom?: { id: string };
+    mood_from?: string;
+    totalMin?: number;
+    duration_min?: number;
+    duration_minutes?: number;
+    avg_bpm?: number;
+  } | null;
 }
 
 export default function SessionFeedbackModal({
@@ -28,15 +39,29 @@ export default function SessionFeedbackModal({
   userId = 'guest',
   journey,
 }: SessionFeedbackModalProps) {
-  const [selectedMoodAfter, setSelectedMoodAfter] = useState<string>('calm_unwind');
+  const [selectedMoodAfter, setSelectedMoodAfter] = useState<MoodId>('calm_unwind');
   const [rating, setRating] = useState<number>(5);
   const [feedbackNote, setFeedbackNote] = useState<string>('');
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const moodBefore = journey?.mood_from || 'anxious';
+  const initialMood = journey?.moodFrom?.id ?? journey?.mood_from;
+  const moodBefore = isMoodId(initialMood) ? initialMood : 'deep_focus';
+  const initialDuration = journey?.totalMin ?? journey?.duration_min ?? journey?.duration_minutes;
+  const durationMinutes = isDurationMinutes(initialDuration) ? initialDuration : 30;
   const beforeMoodObj = moodById(moodBefore);
+  const scope = React.useRef<AbortController | null>(null);
+  const closeTimer = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  React.useEffect(() => {
+    const controller = new AbortController();
+    scope.current = controller;
+    setSubmitting(false); setErrorMsg(null); setSuccessMsg(null);
+    return () => {
+      controller.abort();
+      if (closeTimer.current) clearTimeout(closeTimer.current);
+    };
+  }, [visible, userId]);
 
   const ratingDescriptions: { [key: number]: string } = {
     1: 'Chưa thấy chuyển biến rõ rệt',
@@ -47,41 +72,39 @@ export default function SessionFeedbackModal({
   };
 
   const handleSubmit = async () => {
+    const signal = scope.current?.signal;
+    if (!visible || !signal || signal.aborted || submitting) return;
     try {
       setSubmitting(true);
       setErrorMsg(null);
 
-      const res = await fetch('http://localhost:5000/api/feedback', {
+      await request('/feedback', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        signal,
         body: JSON.stringify({
-          userId,
           journeyId: journey?.id || null,
           journeyTitle: journey?.title || 'Hành trình trị liệu cá nhân',
           moodBefore: moodBefore,
           moodAfter: selectedMoodAfter,
           rating,
           feedbackNote: feedbackNote.trim(),
-          durationMinutes: journey?.duration_minutes || 30,
+          durationMinutes,
         }),
       });
 
-      const data = await res.json();
-      if (data.success) {
+      if (!signal.aborted) {
         setSuccessMsg('✨ Đã lưu đánh giá thành công! Số liệu thống kê đã được cập nhật.');
-        setTimeout(() => {
+        closeTimer.current = setTimeout(() => {
           setSuccessMsg(null);
           setFeedbackNote('');
           if (onFeedbackSubmitted) onFeedbackSubmitted();
           onClose();
         }, 1200);
-      } else {
-        setErrorMsg(data.error || 'Có lỗi xảy ra khi lưu đánh giá.');
       }
     } catch (err: any) {
-      setErrorMsg(err.message || 'Không thể kết nối đến máy chủ.');
+      if (!signal.aborted) setErrorMsg(err.message || 'Không thể kết nối đến máy chủ.');
     } finally {
-      setSubmitting(false);
+      if (!signal.aborted) setSubmitting(false);
     }
   };
 
@@ -101,7 +124,7 @@ export default function SessionFeedbackModal({
               </View>
             </View>
 
-            <Pressable onPress={onClose} style={styles.closeBtn} hitSlop={10}>
+            <Pressable accessibilityRole="button" accessibilityLabel="Đóng khảo sát" onPress={onClose} style={styles.closeBtn} hitSlop={10}>
               <Icon name="close" size={16} color={COLORS.muted} />
             </Pressable>
           </View>
@@ -112,7 +135,7 @@ export default function SessionFeedbackModal({
               <View style={styles.journeyBadge}>
                 <Text style={styles.journeyBadgeTitle}>🎵 {journey.title || 'Hành trình vừa nghe'}</Text>
                 <Text style={styles.journeyBadgeSub}>
-                  Thời lượng: {journey.duration_minutes || 30} phút · Nhịp trống: {journey.avg_bpm || 75} BPM
+                  Thời lượng: {durationMinutes} phút · Nhịp trống: {journey.avg_bpm || 75} BPM
                 </Text>
                 {beforeMoodObj && (
                   <Text style={styles.moodBeforeTag}>

@@ -19,6 +19,8 @@ export default function MobileNav({ page, setPage, onLogout }: MobileNavProps) {
         return (
           <Pressable
             key={item.id}
+            accessibilityRole="button"
+            accessibilityLabel={item.label}
             onPress={() => setPage(item.id)}
             style={styles.tab}
           >
@@ -30,7 +32,7 @@ export default function MobileNav({ page, setPage, onLogout }: MobileNavProps) {
           </Pressable>
         );
       })}
-      <Pressable onPress={() => setPage('settings')} style={styles.tab}>
+      <Pressable accessibilityRole="button" accessibilityLabel="Cài đặt" onPress={() => setPage('settings')} style={styles.tab}>
         <Icon
           name="settings"
           size={20}
@@ -38,7 +40,7 @@ export default function MobileNav({ page, setPage, onLogout }: MobileNavProps) {
         />
       </Pressable>
       {onLogout && (
-        <Pressable onPress={onLogout} style={styles.tab}>
+        <Pressable accessibilityRole="button" accessibilityLabel="Đăng xuất" onPress={onLogout} style={styles.tab}>
           <Icon name="logout" size={18} color={COLORS.danger} />
         </Pressable>
       )}

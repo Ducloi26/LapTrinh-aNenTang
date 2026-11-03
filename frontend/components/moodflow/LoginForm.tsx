@@ -10,7 +10,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { COLORS, GradientColors } from '@/constants/moodflow';
 import { validateLogin } from '@/utils/validation';
 import Field from '@/components/moodflow/Field';
-import { supabase } from '@/lib/supabase';
+import { saveSession } from '@/services/api-client';
 
 interface Props {
   moodColors: GradientColors;
@@ -21,7 +21,6 @@ interface Props {
 export default function LoginForm({ moodColors, onSwitchToRegister, onLoginSuccess }: Props) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [showPassword, setShowPassword] = useState(false);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(false);
 
@@ -50,10 +49,7 @@ export default function LoginForm({ moodColors, onSwitchToRegister, onLoginSucce
       }
 
       // 2. Lưu JWT Token và hồ sơ người dùng
-      if (data.token && typeof localStorage !== 'undefined') {
-        localStorage.setItem('moodflow_token', data.token);
-        localStorage.setItem('moodflow_user', JSON.stringify(data.user));
-      }
+      await saveSession(data.token, data.user);
 
       onLoginSuccess(data.user?.displayName || 'Người nghe');
     } catch (err: any) {
@@ -93,7 +89,7 @@ export default function LoginForm({ moodColors, onSwitchToRegister, onLoginSucce
         error={errors.password}
         inputProps={{
           placeholder: '••••••••',
-          secureTextEntry: !showPassword,
+          secureTextEntry: true,
           value: password,
           onChangeText: setPassword,
         }}

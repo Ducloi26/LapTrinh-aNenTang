@@ -6,6 +6,7 @@ import {
   ScrollView,
   StyleSheet,
   useWindowDimensions,
+  ActivityIndicator,
 } from 'react-native';
 import {
   COLORS,
@@ -44,52 +45,54 @@ import SessionFeedbackModal from '@/components/moodflow/statistics/SessionFeedba
 // Auth Screen
 import AuthScreen from '@/app/auth';
 import { supabase } from '@/lib/supabase';
-import { getCurrentUserProfile } from '@/services/mood-service';
+import { ApiError, CurrentUser, cacheUser, clearSession } from '@/services/api-client';
+import { DEFAULT_JOURNEY_DEFAULTS, getCurrentUser, getSettings } from '@/services/settings-service';
+import { getJourneyTracks, saveJourney } from '@/services/journey-service';
 
 export default function MoodFlowMain() {
-  const [authed, setAuthed] = useState(true);
-  const [userName, setUserName] = useState('Người nghe');
-  const [userId, setUserId] = useState<string>('guest');
-  const [userRole, setUserRole] = useState<'user' | 'admin'>('user');
+  const [authed, setAuthed] = useState(false);
+  const [user, setUser] = useState<CurrentUser | null>(null);
+  const [sessionChecking, setSessionChecking] = useState(true);
+  const [sessionError, setSessionError] = useState<string | null>(null);
+  const sessionVersion = React.useRef(0);
+  const sessionRequest = React.useRef<AbortController | null>(null);
+  const logoutInFlight = React.useRef(false);
+  const userName = user?.displayName || 'Người nghe';
+  const userId = user?.id || 'guest';
+  const userRole = user?.role || 'user';
 
-  // Kiểm tra session từ Backend JWT hoặc Supabase Cloud
-  React.useEffect(() => {
-    if (typeof localStorage !== 'undefined') {
-      const savedUser = localStorage.getItem('moodflow_user');
-      const savedToken = localStorage.getItem('moodflow_token');
-      if (savedToken && savedUser) {
-        try {
-          const u = JSON.parse(savedUser);
-          if (u?.displayName) setUserName(u.displayName);
-          if (u?.id) setUserId(u.id);
-          if (u?.role) setUserRole(u.role);
-          setAuthed(true);
-        } catch (e) {}
+  const refreshSession = React.useCallback(async () => {
+    const version = ++sessionVersion.current;
+    sessionRequest.current?.abort();
+    const controller = new AbortController();
+    sessionRequest.current = controller;
+    setSessionChecking(true);
+    setSessionError(null);
+    try {
+      const current = await getCurrentUser(controller.signal);
+      if (controller.signal.aborted || version !== sessionVersion.current) return;
+      setUser(current);
+      setAuthed(true);
+      void cacheUser(current).catch(() => {});
+    } catch (error) {
+      if (controller.signal.aborted || version !== sessionVersion.current) return;
+      setUser(null);
+      setAuthed(false);
+      if (!(error instanceof ApiError && error.status === 401)) {
+        setSessionError(error instanceof Error ? error.message : 'Không xác minh được phiên đăng nhập.');
       }
+    } finally {
+      if (!controller.signal.aborted && version === sessionVersion.current) setSessionChecking(false);
     }
-
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      if (session?.user) {
-        setAuthed(true);
-        if (session.user.id) setUserId(session.user.id);
-        getCurrentUserProfile().then((prof) => {
-          if (prof?.displayName) setUserName(prof.displayName);
-        });
-      }
-    });
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (session?.user) {
-        setAuthed(true);
-        if (session.user.id) setUserId(session.user.id);
-        getCurrentUserProfile().then((prof) => {
-          if (prof?.displayName) setUserName(prof.displayName);
-        });
-      }
-    });
-
-    return () => subscription.unsubscribe();
   }, []);
+
+  React.useEffect(() => {
+    void refreshSession();
+    return () => {
+      sessionVersion.current += 1;
+      sessionRequest.current?.abort();
+    };
+  }, [refreshSession]);
 
   // App Navigation & Responsive
   const [page, setPage] = useState('home');
@@ -103,18 +106,53 @@ export default function MoodFlowMain() {
   const [nowPlayingModal, setNowPlayingModal] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationStep, setGenerationStep] = useState(0);
+  const generationVersion = React.useRef(0);
+  const generationInterval = React.useRef<ReturnType<typeof setInterval> | null>(null);
+  const generationTimeout = React.useRef<ReturnType<typeof setTimeout> | null>(null);
+  const generationRequest = React.useRef<AbortController | null>(null);
+
+  const cancelGeneration = () => {
+    generationVersion.current += 1;
+    if (generationInterval.current) clearInterval(generationInterval.current);
+    if (generationTimeout.current) clearTimeout(generationTimeout.current);
+    generationRequest.current?.abort();
+  };
+
+  React.useEffect(() => () => cancelGeneration(), []);
 
   React.useEffect(() => {
     setAiReady(true);
   }, []);
 
   // App State: Mood selection & generated journey
-  const [state, setState] = useState<JourneySelection>({
-    moodFrom: 'deep_focus',
-    moodTo: 'calm_unwind',
-    activity: 'deep_work',
-    duration: 30,
-  });
+  const [state, setState] = useState<JourneySelection>({ ...DEFAULT_JOURNEY_DEFAULTS });
+  const [defaults, setDefaults] = useState<JourneySelection | null>(null);
+  const [defaultsError, setDefaultsError] = useState<string | null>(null);
+  const [defaultsRetry, setDefaultsRetry] = useState(0);
+  const defaultsRequest = React.useRef<AbortController | null>(null);
+  const selectionEdited = React.useRef(false);
+  const renderedSession = sessionVersion.current;
+
+  const updateSelection: React.Dispatch<React.SetStateAction<JourneySelection>> = (value) => {
+    selectionEdited.current = true;
+    setState(value);
+  };
+
+  React.useEffect(() => {
+    setDefaults(null);
+    setDefaultsError(null);
+    if (!authed || userId === 'guest') return;
+    const controller = new AbortController();
+    defaultsRequest.current = controller;
+    getSettings(controller.signal).then((result) => {
+      if (controller.signal.aborted) return;
+      setDefaults(result.journeyDefaults);
+      if (!selectionEdited.current) setState(result.journeyDefaults);
+    }).catch((error) => {
+      if (!controller.signal.aborted) setDefaultsError(error instanceof Error ? error.message : 'Không tải được gu mặc định.');
+    });
+    return () => controller.abort();
+  }, [authed, userId, defaultsRetry]);
 
   const [journey, setJourney] = useState<Journey | null>(() =>
     generateJourney({
@@ -155,73 +193,60 @@ export default function MoodFlowMain() {
 
   // Trigger Journey Generation with 5-step animation
   const triggerGenerateJourney = (customState?: typeof state) => {
+    cancelGeneration();
+    const version = generationVersion.current;
+    const controller = new AbortController();
+    generationRequest.current = controller;
     const activeState = customState || state;
     setIsGenerating(true);
     setGenerationStep(0);
+    let step = 0;
 
-    const interval = setInterval(() => {
-      setGenerationStep((prev) => {
-        if (prev < 4) return prev + 1;
-        clearInterval(interval);
-        setTimeout(async () => {
-          const from = moodById(activeState.moodFrom);
-          const to = moodById(activeState.moodTo);
-          const j = generateJourney({
-            moodFrom: from,
-            moodTo: to,
-            activity: activeState.activity,
-            duration: activeState.duration,
-          });
-          setJourney(j);
-          setIsGenerating(false);
-          setPage('journey');
-          const first = j.stages[0]?.tracks[0];
-          if (first) {
-            setNowPlaying(first);
-            setStageInfo({
-              index: 0,
-              total: j.stages.length,
-              title: j.stages[0].title,
-            });
-            setPlaying(true);
-            audioSynth.play();
+    generationInterval.current = setInterval(() => {
+      step += 1;
+      setGenerationStep(step);
+      if (step < 4) return;
+      clearInterval(generationInterval.current!);
+      generationTimeout.current = setTimeout(async () => {
+        let tracks: Track[] | undefined;
+        let catalogError: string | undefined;
+        try {
+          tracks = await getJourneyTracks(controller.signal);
+        } catch (error) {
+          catalogError = error instanceof Error ? error.message : 'Không tải được catalog DB.';
+        }
+        if (version !== generationVersion.current) return;
+        const j = generateJourney({
+          moodFrom: moodById(activeState.moodFrom),
+          moodTo: moodById(activeState.moodTo),
+          activity: activeState.activity, duration: activeState.duration, tracks,
+        });
+        j.saveStatus = catalogError ? 'error' : 'saving';
+        j.saveError = catalogError ? `Chưa lưu DB: ${catalogError}` : undefined;
+        setJourney(j);
+        setIsGenerating(false);
+        setPage('journey');
+        const first = j.stages[0]?.tracks[0];
+        if (first) {
+          setNowPlaying(first);
+          setStageInfo({ index: 0, total: j.stages.length, title: j.stages[0].title });
+          setPlaying(true);
+          audioSynth.play();
+        }
+        if (catalogError) return;
+        try {
+          const saved = await saveJourney(j, controller.signal);
+          if (version === generationVersion.current) {
+            setJourney((current) => current === j ? saved : current);
           }
-
-          // TỰ ĐỘNG LƯU VÀO CSDL BACKEND KHI TẠO HÀNH TRÌNH (GẮN VỚI USER ID)
-          try {
-            const token = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_token') : null;
-            const savedUserStr = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_user') : null;
-            let currentUserId = 'guest';
-            if (savedUserStr) {
-              try {
-                const u = JSON.parse(savedUserStr);
-                if (u?.id) currentUserId = u.id;
-              } catch (e) {}
-            }
-
-            const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-            if (token) headers['Authorization'] = `Bearer ${token}`;
-
-            await fetch('http://localhost:5000/api/journeys', {
-              method: 'POST',
-              headers,
-              body: JSON.stringify({
-                title: `${from.emoji} ${from.label} ➔ ${to.emoji} ${to.label}`,
-                moodFrom: from,
-                moodTo: to,
-                activity: j.activityLabel || activeState.activity,
-                duration: j.totalMin,
-                stages: j.stages,
-                userId: currentUserId,
-                userName: userName || 'Người nghe',
-              }),
-            });
-          } catch (err) {
-            console.error('Lỗi tự động lưu hành trình vào CSDL:', err);
+        } catch (error) {
+          if (version === generationVersion.current) {
+            setJourney((current) => current === j
+              ? { ...j, saveStatus: 'error', saveError: error instanceof Error ? error.message : 'Chưa lưu được hành trình.' }
+              : current);
           }
-        }, 500);
-        return prev;
-      });
+        }
+      }, 500);
     }, 600);
   };
 
@@ -307,22 +332,26 @@ export default function MoodFlowMain() {
       activity: parsed.activity,
       duration: parsed.duration,
     };
-    setState(next);
+    updateSelection(next);
     triggerGenerateJourney(next);
   };
 
   // Switch page content
-  const pageContent = useMemo(() => {
+  const renderPage = () => {
     switch (page) {
       case 'home':
         return (
           <HomePage
             state={state}
-            setState={setState}
+            setState={updateSelection}
             onCreateJourney={() => triggerGenerateJourney()}
             onOpenAI={() => setAiOpen(true)}
             aiReady={aiReady}
             userName={userName}
+            defaultsReady={!!defaults}
+            defaultsError={defaultsError}
+            onApplyDefaults={() => { if (defaults) updateSelection({ ...defaults }); }}
+            onRetryDefaults={() => setDefaultsRetry((value) => value + 1)}
           />
         );
       case 'journey':
@@ -331,6 +360,10 @@ export default function MoodFlowMain() {
             journey={journey}
             state={state}
             onPlayTrack={handlePlayTrack}
+            onJourneyChange={(next) => {
+              if (renderedSession !== sessionVersion.current || logoutInFlight.current) return;
+              setJourney(next);
+            }}
           />
         );
       case 'dna':
@@ -377,35 +410,67 @@ export default function MoodFlowMain() {
           />
         );
       case 'settings':
+        if (!user) return null;
         return (
           <SettingsPage
-            onLogout={() => {
-              audioSynth.pause();
-              setAuthed(false);
+            key={user.id}
+            user={user}
+            onUserChanged={(next) => {
+              if (renderedSession !== sessionVersion.current || logoutInFlight.current || next.id !== user.id) return;
+              setUser(next);
+              void cacheUser(next).catch(() => {});
             }}
-            userName={userName}
+            onDefaultsChanged={(value) => {
+              if (renderedSession !== sessionVersion.current || logoutInFlight.current) return;
+              defaultsRequest.current?.abort();
+              setDefaults(value);
+              setDefaultsError(null);
+            }}
+            onLogout={handleLogout}
           />
         );
       default:
         return null;
     }
-  }, [page, state, journey, userName, playing, aiReady]);
+  };
 
   const [feedbackModalOpen, setFeedbackModalOpen] = useState(false);
   const [logoutPending, setLogoutPending] = useState(false);
 
   const performActualLogout = async () => {
-    if (typeof localStorage !== 'undefined') {
-      localStorage.removeItem('moodflow_token');
-      localStorage.removeItem('moodflow_user');
-    }
-    try {
-      await supabase.auth.signOut();
-    } catch (e) {}
+    if (logoutInFlight.current) return;
+    logoutInFlight.current = true;
+    sessionVersion.current += 1;
+    sessionRequest.current?.abort();
+    defaultsRequest.current?.abort();
+    cancelGeneration();
+    setIsGenerating(false);
     audioSynth.pause();
     setPlaying(false);
-    setAuthed(false);
-    setLogoutPending(false);
+    try {
+      await clearSession();
+      const { error } = await supabase.auth.signOut({ scope: 'local' });
+      if (error) throw error;
+      setUser(null);
+      setAuthed(false);
+      setSessionChecking(false);
+      setSessionError(null);
+      setDefaults(null);
+      setDefaultsError(null);
+      selectionEdited.current = false;
+      setState({ ...DEFAULT_JOURNEY_DEFAULTS });
+      setJourney(null);
+      setNowPlaying(null);
+      setPage('home');
+      setAiOpen(false);
+      setNowPlayingModal(false);
+      setFeedbackModalOpen(false);
+    } catch {
+      setSessionError('Chưa xóa được toàn bộ phiên. Vui lòng thử đăng xuất lại.');
+    } finally {
+      setLogoutPending(false);
+      logoutInFlight.current = false;
+    }
   };
 
   const handleLogout = () => {
@@ -415,13 +480,25 @@ export default function MoodFlowMain() {
   };
 
   // If user is not logged in, render AuthScreen
+  if (sessionChecking || sessionError) {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.bg, padding: 24, gap: 16 }}>
+        {sessionChecking ? <ActivityIndicator color="#22D3EE" /> : (
+          <>
+            <Text style={{ color: COLORS.danger }}>{sessionError}</Text>
+            <Pressable accessibilityRole="button" onPress={() => { if (authed) void performActualLogout(); else void refreshSession(); }}>
+              <Text style={{ color: COLORS.text }}>Thử lại</Text>
+            </Pressable>
+          </>
+        )}
+      </View>
+    );
+  }
+
   if (!authed) {
     return (
       <AuthScreen
-        onAuthSuccess={(name) => {
-          setUserName(name || 'Người nghe');
-          setAuthed(true);
-        }}
+        onAuthSuccess={() => { void refreshSession(); }}
       />
     );
   }
@@ -461,7 +538,7 @@ export default function MoodFlowMain() {
             </Pressable>
           </View>
 
-          {pageContent}
+          {renderPage()}
         </ScrollView>
       </View>
 

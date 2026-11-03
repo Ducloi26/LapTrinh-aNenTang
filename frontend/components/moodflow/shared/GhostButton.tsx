@@ -4,15 +4,18 @@ import { COLORS } from '@/constants/moodflow';
 
 interface GhostButtonProps {
   children: React.ReactNode;
-  onClick: () => void;
+  onClick?: () => void;
   active?: boolean;
+  disabled?: boolean;
 }
 
-export default function GhostButton({ children, onClick, active }: GhostButtonProps) {
+export default function GhostButton({ children, onClick, active, disabled }: GhostButtonProps) {
   return (
     <Pressable
       onPress={onClick}
-      style={[styles.button, active ? styles.buttonActive : styles.buttonInactive]}
+      disabled={disabled}
+      accessibilityRole="button"
+      style={[styles.button, active ? styles.buttonActive : styles.buttonInactive, disabled && { opacity: 0.45 }]}
     >
       <Text style={[styles.text, active ? styles.textActive : styles.textInactive]}>
         {children}

@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
+import { SavedJourney, restoreJourney } from '@/services/journey-service';
 import {
   View,
   Text,
@@ -10,14 +11,17 @@ import {
   ScrollView,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, MOODS, moodById } from '@/constants/moodflow';
+import { COLORS, MOODS } from '@/constants/moodflow';
 import SectionTitle from '@/components/moodflow/shared/SectionTitle';
 import Icon from '@/components/moodflow/shared/Icon';
 import ShareJourneyModal from '@/components/moodflow/community/ShareJourneyModal';
 import EditPostModal from '@/components/moodflow/community/EditPostModal';
 
+import { ApiError, request } from '@/services/api-client';
+
 interface CommunityComment {
   id: string;
+  user_id?: string;
   author_name: string;
   content: string;
   created_at: string;
@@ -33,7 +37,7 @@ interface CommunityPost {
   liked_by?: string[];
   comment_count: number;
   comments?: CommunityComment[];
-  journey: any;
+  journey: SavedJourney;
   created_at: string;
 }
 
@@ -64,197 +68,72 @@ export default function CommunityPage({
   const [submittingComment, setSubmittingComment] = useState<string | null>(null);
   const [savedFeedback, setSavedFeedback] = useState<{ [postId: string]: string }>({});
 
-  // 1. Tải danh sách bài viết từ Backend API
-  const fetchPosts = async () => {
-    try {
-      setLoading(true);
-      const url = `http://localhost:5000/api/community/posts?tab=${tab}&mood=${selectedMood}`;
-      const res = await fetch(url);
-      const data = await res.json();
-      if (data.success && Array.isArray(data.data)) {
-        setPosts(data.data);
-      }
-    } catch (err) {
-      console.error('Lỗi tải bài viết cộng đồng:', err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  const [error, setError] = useState<string | null>(null);
+  const scope = React.useRef<AbortController | null>(null);
+  const sequence = React.useRef(0);
   useEffect(() => {
-    fetchPosts();
+    const controller = new AbortController();
+    scope.current = controller;
+    return () => controller.abort();
+  }, [userId]);
+
+  const fetchPosts = useCallback(async () => {
+    const signal = scope.current?.signal;
+    const version = ++sequence.current;
+    if (!signal || signal.aborted) return;
+    setLoading(true); setPosts([]); setError(null);
+    try {
+      const result = await request<{ data: CommunityPost[] }>('/community/posts?tab=' + tab + '&mood=' + selectedMood,
+        { signal }, false);
+      if (!signal.aborted && version === sequence.current) setPosts(result.data);
+    } catch (failure) {
+      if (!signal.aborted && version === sequence.current) setError(failure instanceof Error ? failure.message : 'Không tải được bảng tin.');
+    } finally { if (!signal.aborted && version === sequence.current) setLoading(false); }
   }, [tab, selectedMood]);
+  useEffect(() => { void fetchPosts(); }, [fetchPosts, userId]);
 
-  // Xóa bài viết
-  const handleDeletePost = async (postId: string) => {
+  const action = async (postId: string, suffix: string, method: string, body = {}) => {
+    const signal = scope.current?.signal;
+    if (!signal || signal.aborted) return false;
     try {
-      setDeletingPostId(postId);
-      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_token') : null;
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch(`http://localhost:5000/api/community/posts/${postId}`, {
-        method: 'DELETE',
-        headers,
-      });
-      const data = await res.json();
-      if (data.success) {
-        setPosts((prev) => prev.filter((p) => p.id !== postId));
-      }
-    } catch (err) {
-      console.error('Lỗi xóa bài viết:', err);
-    } finally {
-      setDeletingPostId(null);
+      await request('/community/posts/' + encodeURIComponent(postId) + suffix,
+        { method, signal, ...(method === 'DELETE' ? {} : { body: JSON.stringify(body) }) });
+      if (signal.aborted) return false;
+      setError(null); void fetchPosts(); return true;
+    } catch (failure) {
+      if (signal.aborted) return false;
+      if (failure instanceof ApiError && failure.status === 404) {
+        setPosts((current) => current.filter((post) => post.id !== postId)); setEditingPost(null);
+      } else if (!(failure instanceof ApiError) || failure.status >= 500) setPosts([]);
+      setError(failure instanceof Error ? failure.message : 'Thao tác thất bại.'); return false;
     }
   };
-
-  // Xóa bình luận
-  const handleDeleteComment = async (postId: string, commentId: string) => {
-    try {
-      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_token') : null;
-      const headers: Record<string, string> = {};
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch(`http://localhost:5000/api/community/posts/${postId}/comments/${commentId}`, {
-        method: 'DELETE',
-        headers,
-      });
-      const data = await res.json();
-      if (data.success) {
-        setPosts((prev) =>
-          prev.map((p) => {
-            if (p.id === postId) {
-              return {
-                ...p,
-                comment_count: Math.max(0, p.comment_count - 1),
-                comments: p.comments?.filter((c) => c.id !== commentId) || [],
-              };
-            }
-            return p;
-          })
-        );
-      }
-    } catch (err) {
-      console.error('Lỗi xóa bình luận:', err);
-    }
+  const handleDeletePost = async (id: string) => {
+    setDeletingPostId(id); await action(id, '', 'DELETE');
+    if (!scope.current?.signal.aborted) setDeletingPostId(null);
   };
-
-  // 2. Thả tim / Bỏ tim bài viết
-  const handleToggleLike = async (postId: string) => {
-    // Optimistic update
-    setPosts((prev) =>
-      prev.map((p) => {
-        if (p.id === postId) {
-          const liked = p.liked_by?.includes(userId);
-          const nextLikedBy = liked
-            ? p.liked_by?.filter((id) => id !== userId) || []
-            : [...(p.liked_by || []), userId];
-          const nextLikeCount = liked
-            ? Math.max(0, p.like_count - 1)
-            : p.like_count + 1;
-          return {
-            ...p,
-            liked_by: nextLikedBy,
-            like_count: nextLikeCount,
-          };
-        }
-        return p;
-      })
-    );
-
-    try {
-      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_token') : null;
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      await fetch(`http://localhost:5000/api/community/posts/${postId}/like`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ userId }),
-      });
-    } catch (err) {
-      console.error('Lỗi like bài viết:', err);
-      fetchPosts();
-    }
+  const handleDeleteComment = (id: string, commentId: string) => action(id, '/comments/' + encodeURIComponent(commentId), 'DELETE');
+  const handleToggleLike = (id: string) => action(id, '/like', 'POST');
+  const handleSendComment = async (id: string) => {
+    const content = commentInput[id]?.trim();
+    if (!content) return;
+    setSubmittingComment(id);
+    if (await action(id, '/comments', 'POST', { content })) setCommentInput((current) => ({ ...current, [id]: '' }));
+    if (!scope.current?.signal.aborted) setSubmittingComment(null);
   };
-
-  // 3. Gửi bình luận
-  const handleSendComment = async (postId: string) => {
-    const text = commentInput[postId]?.trim();
-    if (!text) return;
-
-    try {
-      setSubmittingComment(postId);
-      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_token') : null;
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch(`http://localhost:5000/api/community/posts/${postId}/comments`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({
-          content: text,
-          authorName: userName,
-          userId,
-        }),
-      });
-
-      const data = await res.json();
-      if (data.success && data.comment) {
-        setPosts((prev) =>
-          prev.map((p) => {
-            if (p.id === postId) {
-              return {
-                ...p,
-                comment_count: p.comment_count + 1,
-                comments: [...(p.comments || []), data.comment],
-              };
-            }
-            return p;
-          })
-        );
-        setCommentInput((prev) => ({ ...prev, [postId]: '' }));
-      }
-    } catch (err) {
-      console.error('Lỗi gửi bình luận:', err);
-    } finally {
-      setSubmittingComment(null);
-    }
+  const handleSaveToMyMusic = async (id: string) => {
+    if (await action(id, '/save', 'POST')) setSavedFeedback((current) => ({ ...current, [id]: 'Đã lưu bản sao Chỉ mình tôi vào Thư viện.' }));
   };
-
-  // 4. Lưu hành trình vào Thư viện cá nhân
-  const handleSaveToMyMusic = async (postId: string) => {
+  const handlePlayCommunityJourney = async (post: CommunityPost) => {
+    const signal = scope.current?.signal;
+    if (!signal || signal.aborted) return;
     try {
-      const token = typeof localStorage !== 'undefined' ? localStorage.getItem('moodflow_token') : null;
-      const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-      if (token) headers['Authorization'] = `Bearer ${token}`;
-
-      const res = await fetch(`http://localhost:5000/api/community/posts/${postId}/save`, {
-        method: 'POST',
-        headers,
-        body: JSON.stringify({ userId }),
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        setSavedFeedback((prev) => ({ ...prev, [postId]: '✨ Đã lưu vào Thư viện của bạn!' }));
-        setTimeout(() => {
-          setSavedFeedback((prev) => {
-            const next = { ...prev };
-            delete next[postId];
-            return next;
-          });
-        }, 3000);
-      }
-    } catch (err) {
-      console.error('Lỗi lưu hành trình:', err);
-    }
-  };
-
-  // 5. Phát hành trình cộng đồng
-  const handlePlayCommunityJourney = (post: CommunityPost) => {
-    if (onSelectJourney && post.journey) {
-      onSelectJourney(post.journey);
+      const result = await request<{ post: CommunityPost }>('/community/posts/' + encodeURIComponent(post.id), { signal }, false);
+      if (!signal.aborted) onSelectJourney?.({ ...restoreJourney(result.post.journey), id: undefined,
+        isPublic: undefined, shareVersion: undefined, saveStatus: undefined, saveError: undefined });
+    } catch (failure) {
+      if (!signal.aborted) { setPosts((current) => current.filter((item) => item.id !== post.id));
+        setError(failure instanceof Error ? failure.message : 'Bài viết không còn khả dụng.'); }
     }
   };
 
@@ -269,13 +148,14 @@ export default function CommunityPage({
       if (hours < 24) return `${hours} giờ trước`;
       const days = Math.floor(hours / 24);
       return `${days} ngày trước`;
-    } catch (e) {
+    } catch {
       return 'Gần đây';
     }
   };
 
   return (
     <View style={styles.container}>
+      {error && <Text accessibilityRole="alert" style={{ color: COLORS.danger }}>{error}</Text>}
       {/* Top Header & Share Button */}
       <View style={styles.topHeaderRow}>
         <View style={{ flex: 1 }}>
@@ -406,8 +286,6 @@ export default function CommunityPage({
           {posts.map((post) => {
             const isLiked = post.liked_by?.includes(userId);
             const isCommentsOpen = openCommentPostId === post.id;
-            const fromMood = moodById(post.journey?.mood_from);
-            const toMood = moodById(post.journey?.mood_to);
 
             return (
               <View key={post.id} style={styles.postCard}>
@@ -602,13 +480,13 @@ export default function CommunityPage({
                               <Text style={styles.commentAuthor}>{c.author_name}</Text>
                               <View style={styles.commentRightMeta}>
                                 <Text style={styles.commentTime}>{formatTimeAgo(c.created_at)}</Text>
-                                <Pressable
+                                {(c.user_id === userId || userRole === 'admin') && <Pressable
                                   style={styles.commentDeleteBtn}
                                   onPress={() => handleDeleteComment(post.id, c.id)}
                                   accessibilityLabel="Xóa bình luận"
                                 >
                                   <Icon name="trash" size={11} color={COLORS.faint} />
-                                </Pressable>
+                                </Pressable>}
                               </View>
                             </View>
                             <Text style={styles.commentContent}>{c.content}</Text>
@@ -669,6 +547,7 @@ export default function CommunityPage({
         onUpdateSuccess={() => {
           fetchPosts();
         }}
+        onUnavailable={(message) => { setEditingPost(null); setPosts([]); setError(message); }}
       />
     </View>
   );
