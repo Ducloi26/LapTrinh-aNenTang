@@ -5,7 +5,7 @@ const { test } = require('node:test');
 const { loadModule } = require('./test-support.cjs');
 const root = path.resolve(__dirname, '../..');
 
-function fixture(synthSupported = false) {
+function fixture(synthSupported = false, options = {}) {
   const engines = [];
   const synth = {
     isSupported: synthSupported, calls: [],
@@ -16,6 +16,7 @@ function fixture(synthSupported = false) {
     async stop() { this.calls.push(['stop']); },
   };
   const { PlayerService, BINAURAL_MIX } = loadModule('services/player-service.ts', {
+    './audius-search-service': { prepareAudiusTrack: options.prepare || (async track => track) },
     './audio-service': { audioSynth: synth },
     './audio-engine': {
       configureAudioSession: async () => {},
@@ -39,11 +40,28 @@ function fixture(synthSupported = false) {
       },
     },
   });
-  return { service: new PlayerService(), engines, mix: BINAURAL_MIX, synth };
+  return { service: new PlayerService(options.history), engines, mix: BINAURAL_MIX, synth };
 }
 
 const song = (name = 'song') => ({ title: name, artist: 'Test', cover: '', audioUrl: `https://example.test/${name}.mp3` });
 const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+test('Audius history begins with imported database UUID and replay preserves it', async () => {
+  const ids=[];const id='1243db97-dd2f-5576-a7ad-c847b44ed5d5';
+  const history={active:false,begin(value){ids.push(value);this.active=true;},update(){},finish(){this.active=false;}};
+  const {service}=fixture(true,{history,prepare:async track=>({...track,id})});
+  await service.load({...song(),audiusSourceId:'lvBQl'});await service.play();
+  assert.equal(ids[0],id);service.stop();service.dispose();
+});
+
+test('stale Audius imports cannot load after a newer track was selected', async () => {
+  let finishImport;const ids=[];
+  const {service,engines}=fixture(true,{prepare:track=>new Promise(resolve=>{finishImport=()=>resolve({...track,id:'old'});}),
+    history:{begin(id){ids.push(id);},update(){},finish(){}}});
+  const old=service.load({...song('old'),audiusSourceId:'old'}).catch(error=>error.name);
+  await service.load({...song('new'),id:'new'});finishImport();assert.equal(await old,'AbortError');
+  assert.equal(engines.length,1);assert.deepEqual(ids,['new']);service.dispose();
+});
 
 test('web playback uses the synth for Energy and Meditation, syncs volume and lifecycle without WAV layers', async () => {
   const { service, engines, synth } = fixture(true);

@@ -9,6 +9,7 @@ export interface DNAScores {
 }
 
 export interface DNAProfile {
+  scoreCoverage: DNAScores;
   scores: DNAScores;
   genreDistribution: GenreShare[];
   hasHistory: boolean;
@@ -410,6 +411,7 @@ function getBinauralValue(features: TrackFeatures): boolean | null {
 
 export function createDefaultDNA(): DNAProfile {
   return {
+    scoreCoverage: {energy:0,depth:0,frequency:0,rhythm:0,focus:0},
     scores: { ...DEFAULT_SCORES },
     genreDistribution: calculateGenreDistribution({}, 0),
     hasHistory: false,
@@ -607,6 +609,8 @@ export function aggregateDNA(records: ListeningRecord[]): DNAProfile {
   };
   return {
     scores,
+    scoreCoverage: Object.fromEntries(Object.entries({energy,depth,frequency,rhythm,focus}).map(([key,values]) =>
+      [key,Math.round(values.reduce((sum,item)=>sum+item.weight,0)/listeningSeconds*100)])) as unknown as DNAScores,
     genreDistribution: calculateGenreDistribution(genreTotals, listeningSeconds),
     hasHistory: true,
     listeningSeconds,

@@ -6,6 +6,7 @@ import SectionTitle from '@/components/moodflow/shared/SectionTitle';
 import GhostButton from '@/components/moodflow/shared/GhostButton';
 import MusicCard from '@/components/moodflow/journey/MusicCard';
 import Icon from '@/components/moodflow/shared/Icon';
+import ListeningHistoryTab from './ListeningHistoryTab';
 
 const TABS = [
   { id: 'journeys', label: '🎼 Journey của tôi' },
@@ -327,7 +328,8 @@ export default function MyMusicPage({
       )}
 
       {/* TAB 3: BÀI HÁT ĐÃ LƯU / PLAYLIST / LỊCH SỬ */}
-      {(tab === 'saved' || tab === 'playlists' || tab === 'history') && (
+      {tab === 'history' && <ListeningHistoryTab />}
+      {(tab === 'saved' || tab === 'playlists') && (
         <View style={styles.sectionWrap}>
           <Text style={styles.sectionHeading}>Danh mục {tab}</Text>
           <View style={styles.trackList}>

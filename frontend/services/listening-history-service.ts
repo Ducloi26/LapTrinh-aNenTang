@@ -2,7 +2,9 @@ import { supabase } from '../lib/supabase';
 import { getBackendSession } from './backend-session';
 import type { ListeningRecord } from './listening-history-tracker';
 
-export function historyErrorMessage(error: { code?: string; message?: string }): string {
+export function historyErrorMessage(error: { code?: string; message?: string; name?: string }): string {
+  if (error.name === 'AbortError') return 'Lưu lịch sử quá thời gian chờ. Lượt nghe vẫn đang chờ; bấm Thử lưu lại.';
+  if (/failed to fetch|fetch failed|network request failed/i.test(error.message || '')) return 'Không kết nối được backend để lưu lịch sử. Kiểm tra backend cổng 5000, rồi bấm Thử lưu lại trước khi tải lại trang.';
   if (error.code === 'PGRST202') return 'Tính năng lịch sử nghe chưa được cấu hình trên máy chủ.';
   if (error.code === '42501') return 'Tài khoản hiện tại chưa được phép lưu lịch sử nghe. Vui lòng kiểm tra đăng nhập.';
   if (error.code === 'BACKEND_HISTORY') return error.message || 'Không lưu được lịch sử qua backend.';
@@ -63,7 +65,10 @@ export class ListeningHistoryWriter {
               method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${backend.token}` },
               signal: controller.signal, body: JSON.stringify(record),
             });
-            const result = await response.json();
+            let result;
+            try { result = await response.json(); } catch {
+              throw {code:'BACKEND_HISTORY',message:'Backend chưa có API lưu lịch sử hoặc trả dữ liệu không hợp lệ. Khởi động lại backend rồi bấm Thử lưu lại.'};
+            }
             if (!response.ok || !result.success) throw { code: 'BACKEND_HISTORY', message: result.error || 'Backend từ chối lưu lịch sử.' };
           } else {
           const { error: writeError } = await supabase.rpc('record_listening_history', {

@@ -19,18 +19,23 @@ export function mapTrackCatalog(rows: TrackRow[]): MusicCatalog {
   const tracks: Track[] = [];
   for (const row of rows) {
     if (typeof row.audio_url !== 'string' || !row.audio_url.trim()) continue;
-    const energyValue = Number(row.energy ?? 50);
+    const feature = Array.isArray(row.track_features) ? row.track_features[0] : row.track_features;
+    const details = feature && typeof feature === 'object' ? feature as TrackRow : {};
+    const artist = Array.isArray(row.artists) ? row.artists[0] : row.artists;
+    const artistName = artist && typeof artist === 'object' ? (artist as TrackRow).name : undefined;
+    const energyValue = Number(details.energy ?? row.energy ?? 50);
     const energy = Number.isFinite(energyValue) ? Math.max(0, Math.min(100, energyValue)) : 50;
     const track: Track = {
       id: row.id == null ? undefined : String(row.id),
       title: String(row.title || 'Bài hát'),
-      artist: String(row.artist || row.artist_name || 'Nghệ sĩ'),
+      artist: String(artistName || row.artist || row.artist_name || 'Nghệ sĩ'),
       genre: String(row.genre || 'Music'),
       duration: durationLabel(row.duration ?? row.duration_seconds ?? row.duration_sec),
       cover: String(row.cover_url || TRACK_POOL.acknowledge[0].cover),
       audioUrl: row.audio_url.trim(),
+      audiusSourceId: /https:\/\/api\.audius\.co\/v1\/tracks\/([a-z0-9]+)\/stream/i.exec(row.audio_url)?.[1],
       energy,
-      bpm: Number(row.tempo_bpm ?? row.bpm) || undefined,
+      bpm: Number(details.bpm ?? row.tempo_bpm ?? row.bpm) || undefined,
     };
     const pool = typeof row.pool_key === 'string' ? row.pool_key : energy < 35 ? 'acknowledge' : energy > 65 ? 'elevate' : 'transition';
     (pools[pool] ??= []).push(track);
@@ -67,7 +72,7 @@ export async function loadMusicCatalog(): Promise<MusicCatalog> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 15000);
   try {
-    const { data, error, status } = await supabase.from('tracks').select('*').limit(500).abortSignal(controller.signal);
+    const { data, error, status } = await supabase.from('tracks').select('*, artists(name), track_features(*)').limit(500).abortSignal(controller.signal);
     if (error) throw new Error(describeCatalogError(error, status, controller.signal.aborted));
     const catalog = mapTrackCatalog(data ?? []);
     if (!catalog.tracks.length) throw new Error('Chưa có bài hát có audio_url trong bảng tracks hoặc tài khoản chưa có quyền đọc.');

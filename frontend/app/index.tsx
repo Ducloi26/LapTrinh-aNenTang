@@ -514,7 +514,9 @@ export default function MoodFlowMain() {
           />
         );
       case "discover":
-        return <DiscoverPage />;
+        return (
+          <DiscoverPage />
+        );
       case "mymusic":
         return (
           <MyMusicPage

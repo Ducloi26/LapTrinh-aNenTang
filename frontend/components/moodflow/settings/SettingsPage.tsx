@@ -16,7 +16,6 @@ const SETTINGS_ROWS = [
   'Gu âm nhạc mặc định',
   'Thông báo',
   'Quyền riêng tư',
-  'Kết nối YouTube',
   'Ngôn ngữ',
 ];
 

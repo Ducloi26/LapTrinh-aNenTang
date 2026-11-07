@@ -281,6 +281,9 @@ export default function MusicDNAPage({
       )}
 
       <View style={[styles.chartCard, styles.identityCard]}>
+        {profile.hasHistory && Object.values(profile.scoreCoverage).some(value => value < 100) && (
+          <Text style={styles.noticeText}>Một số bài thiếu đặc tính âm thanh. Chỉ số chỉ dùng các lượt có dữ liệu tương ứng; trục chưa có dữ liệu giữ mức mặc định 50, không phải điểm đo thực tế.</Text>
+        )}
         <Text style={styles.cardHeader}>HỒ SƠ ĐỊNH DANH ÂM NHẠC</Text>
         {loading ? (
           <Text style={styles.cardDescription}>

@@ -4,6 +4,7 @@ import { audioSynth } from './audio-service';
 import { configureAudioSession, createAudioEngine } from './audio-engine';
 import { AudioEngine, cancelledLoad, PlaybackProgress } from './audio-engine.types';
 import { resolveTrackSource } from './track-source';
+import { prepareAudiusTrack } from './audius-search-service';
 import type { ListeningContext, ListeningEndReason, ListeningHistoryTracker } from './listening-history-tracker';
 
 // Bundled stereo loops also work on native, where Web Audio oscillators are unavailable.
@@ -54,11 +55,16 @@ export class PlayerService {
     this.finishHistory('changed');
     this.selectedTrack = track;
     this.listeningContext = listeningContext;
-    this.history?.begin(track.id, listeningContext);
     const generation = ++this.generation;
     this.releaseMusic();
     this.publish({ position: 0, duration: 0, isPlaying: false, isBuffering: true });
     try {
+      if (track.audiusSourceId) {
+        track = await prepareAudiusTrack(track);
+        if (generation !== this.generation) throw cancelledLoad();
+        this.selectedTrack = track;
+      }
+      this.history?.begin(track.id, listeningContext);
       const source = resolveTrackSource(track);
       await configureAudioSession();
       if (generation !== this.generation) throw cancelledLoad();

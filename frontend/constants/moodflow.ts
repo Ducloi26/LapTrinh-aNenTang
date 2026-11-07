@@ -93,6 +93,7 @@ export const NAV_ITEMS: NavItem[] = [
 ];
 
 export interface Track {
+  audiusSourceId?: string;
   storagePath?: string;
   storageBucket?: string;
   id?: string;
