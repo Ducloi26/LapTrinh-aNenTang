@@ -270,6 +270,25 @@ function createJourneyHandlers({ database, verifyToken, databaseForExpressUser, 
         return res.json({ success: true, storage: 'cloud' });
       } catch (error) { return fail(res, error, 'journey_remove'); }
     },
+
+    async rename(req, res) {
+      if (!UUID.test(req.params.id || '') || typeof req.body?.title !== 'string'
+        || !req.body.title.trim() || req.body.title.trim().length > 200
+        || Object.keys(req.body || {}).length !== 1) {
+        return res.status(400).json({ success: false, error: 'Tên hành trình phải có từ 1 đến 200 ký tự.' });
+      }
+      const auth = await session(req, res);
+      if (!auth) return;
+      try {
+        const { data, error } = await auth.db.from('journeys')
+          .update({ title: req.body.title.trim(), updated_at: new Date().toISOString() })
+          .eq('id', req.params.id).eq('user_id', auth.userId).is('deleted_at', null)
+          .select('id,title').maybeSingle();
+        if (error) throw error;
+        if (!data) return res.status(404).json({ success: false, error: 'Không tìm thấy hành trình thuộc tài khoản của bạn.' });
+        return res.json({ success: true, journey: data });
+      } catch (error) { return fail(res, error, 'journey_rename'); }
+    },
   };
 }
 

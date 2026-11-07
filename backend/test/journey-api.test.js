@@ -45,7 +45,7 @@ const unlinked = '33333333-3333-4333-8333-333333333333';
 
 function database() {
   const db = {
-    rows: { profiles: [], journeys: [], journey_tracks: [], tracks: [0, 1, 2, 3].map((index) => ({
+    rows: { profiles: [], journeys: [], journey_tracks: [], user_favorites: [], tracks: [0, 1, 2, 3].map((index) => ({
       id: `aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa${index}`,
       title: `DB track ${index}`, genre: 'Ambient', duration_sec: 245,
       cover_url: 'https://example.test/cover', audio_url: 'https://example.test/audio',
@@ -485,6 +485,20 @@ function routeHandler(method, route, mocks) {
   return vm.runInNewContext(`(${callback.getText(backendAst)})`, { asyncRoute: (handler) => handler, ...mocks });
 }
 
+test('journey rename validates the title and updates only the verified owner journey', async () => {
+  const f = setup();
+  const saved = await call(f.api, 'save', await payload(f.api));
+  const journeyId = saved.body.journey.id;
+  const renamed = await call(f.api, 'rename', { title: '  Hành trình mới  ' }, 'owner', { id: journeyId });
+  assert.equal(renamed.statusCode, 200);
+  assert.equal(renamed.body.journey.title, 'Hành trình mới');
+
+  const denied = await call(f.api, 'rename', { title: 'Tên của người khác' }, 'other', { id: journeyId });
+  assert.equal(denied.statusCode, 404);
+  assert.equal(f.db.rows.journeys[0].title, 'Hành trình mới');
+  assert.equal((await call(f.api, 'rename', { title: '   ' }, 'owner', { id: journeyId })).statusCode, 400);
+});
+
 test('community save delegates to the same cloud journey contract', async () => {
   const { api } = setup();
   const input = await payload(api, 45);
@@ -505,11 +519,13 @@ test('community save delegates to the same cloud journey contract', async () => 
 });
 
 test('DNA and statistics read authenticated cloud journeys, not local journey files', async () => {
-  const { api } = setup();
+  const fixture = setup();
+  const { api } = fixture;
   await call(api, 'save', await payload(api, 45));
   for (const route of ['/api/recommendations/dna', '/api/stats']) {
     const handler = routeHandler('get', route, {
       journeyHandlers: api,
+      serverAuth: { databaseForUser: async () => fixture.db },
       getLocalLikedTracks: () => [], getLocalEvaluations: () => [], MOOD_LABELS: {},
     });
     const response = { statusCode: 200, status(code) { this.statusCode = code; return this; }, json(value) { this.body = value; return this; } };

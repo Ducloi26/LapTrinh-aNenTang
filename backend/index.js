@@ -52,7 +52,7 @@ app.use('/api', (req, res, next) => {
   if (!['/health', '/moods', '/activities', '/tracks'].includes(req.path)) res.set('Cache-Control', 'private, no-store');
   next();
 });
-app.use(['/api/profiles', '/api/tracks/like', '/api/tracks/liked', '/api/feedback'], async (req, res, next) => {
+app.use(['/api/profiles', '/api/tracks/like', '/api/tracks/liked', '/api/feedback', '/api/library'], async (req, res, next) => {
   try {
     req.actor = await serverAuth.authenticate(/^Bearer (\S+)$/.exec(req.headers.authorization || '')?.[1]);
     next();
@@ -80,8 +80,6 @@ const dataDir = path.resolve(__dirname, 'data');
 if (!fs.existsSync(dataDir)) fs.mkdirSync(dataDir, { recursive: true });
 const usersFile = path.resolve(dataDir, 'users.json');
 if (!fs.existsSync(usersFile)) fs.writeFileSync(usersFile, '[]', 'utf8');
-const likedTracksFile = path.resolve(dataDir, 'liked_tracks.json');
-if (!fs.existsSync(likedTracksFile)) fs.writeFileSync(likedTracksFile, '[]', 'utf8');
 const communityFile = path.resolve(dataDir, 'community_posts.json');
 if (!fs.existsSync(communityFile)) fs.writeFileSync(communityFile, '[]', 'utf8');
 const evaluationsFile = path.resolve(dataDir, 'session_evaluations.json');
@@ -99,18 +97,6 @@ function saveLocalUsers(users) {
   try {
     fs.writeFileSync(usersFile, JSON.stringify(users, null, 2), 'utf8');
   } catch (e) {}
-}
-
-function getLocalLikedTracks() {
-  const tracks = JSON.parse(fs.readFileSync(likedTracksFile, 'utf8'));
-  if (!Array.isArray(tracks)) throw new Error('Liked tracks storage is invalid');
-  return tracks;
-}
-
-function saveLocalLikedTracks(tracks) {
-  const temporary = likedTracksFile + '.tmp';
-  fs.writeFileSync(temporary, JSON.stringify(tracks, null, 2), 'utf8');
-  fs.renameSync(temporary, likedTracksFile);
 }
 
 function getLocalCommunityPosts() {
@@ -335,38 +321,34 @@ app.post('/api/journeys', journeyHandlers.save);
 app.get('/api/journeys/my', journeyHandlers.list);
 app.delete('/api/journeys/:id', journeyHandlers.remove);
 app.patch('/api/journeys/:id/privacy', journeyHandlers.privacy);
-app.post('/api/tracks/like', (req, res) => {
-  const { track } = req.body;
-  if (!track || typeof track.id !== 'string' || !track.id || typeof track.title !== 'string') {
-    return res.status(400).json({ success: false, error: 'Thiếu thông tin bài hát.' });
-  }
-  const userId = req.actor.user.id;
-  const tracks = getLocalLikedTracks();
-  const index = tracks.findIndex((item) => item.id === track.id && item.user_id === userId);
-  if (index >= 0) tracks.splice(index, 1);
-  else tracks.unshift({ ...track, user_id: userId, liked_at: new Date().toISOString() });
-  saveLocalLikedTracks(tracks);
-  res.json({ success: true, liked: index < 0, count: tracks.filter((item) => item.user_id === userId).length });
+app.patch('/api/journeys/:id/title', journeyHandlers.rename);
+const { createMusicLibraryHandlers } = require('./music-library-api');
+const musicLibraryHandlers = createMusicLibraryHandlers({
+  databaseForUser: serverAuth.databaseForUser,
 });
-app.get('/api/tracks/liked', (req, res) => {
-  const data = getLocalLikedTracks().filter((item) => item.user_id === req.actor.user.id);
-  res.json({ success: true, data, count: data.length });
-});
+app.get('/api/library/summary', asyncRoute(musicLibraryHandlers.summary));
+app.get('/api/library/favorites', asyncRoute(musicLibraryHandlers.favorites));
+app.delete('/api/library/favorites/:trackId', asyncRoute(musicLibraryHandlers.removeFavorite));
+app.get('/api/library/history', asyncRoute(musicLibraryHandlers.history));
+app.delete('/api/library/history', asyncRoute(musicLibraryHandlers.clearHistory));
+app.post('/api/tracks/like', asyncRoute(musicLibraryHandlers.toggleFavorite));
+app.get('/api/tracks/liked', asyncRoute(musicLibraryHandlers.favorites));
 
 app.get('/api/recommendations/dna', asyncRoute(async (req, res) => {
   const result = await journeyHandlers.read(req, res);
   if (!result) return;
   const targetUserId = result.userId;
   const allJourneys = result.journeys;
-  const allLiked = getLocalLikedTracks();
-
-  // Lọc dữ liệu của user này
-  const userJourneys = targetUserId && targetUserId !== 'guest' 
-    ? allJourneys.filter(j => j.user_id === targetUserId) 
-    : allJourneys;
-  const userLiked = targetUserId && targetUserId !== 'guest'
-    ? allLiked.filter(t => t.user_id === targetUserId)
-    : allLiked;
+  const userJourneys = allJourneys.filter((journey) => journey.user_id === targetUserId);
+  const userDatabase = await serverAuth.databaseForUser({ id: targetUserId });
+  const { data: favoriteRows, error: favoriteError } = await userDatabase.from('user_favorites')
+    .select('track_id,tracks(track_features(bpm))').eq('user_id', targetUserId);
+  if (favoriteError) throw favoriteError;
+  const userLiked = (favoriteRows || []).map((row) => {
+    const track = Array.isArray(row.tracks) ? row.tracks[0] : row.tracks;
+    const features = Array.isArray(track?.track_features) ? track.track_features[0] : track?.track_features;
+    return { bpm: features?.bpm };
+  });
 
   // Thống kê nhịp BPM ưa chuộng
   let bpmSum = 0;

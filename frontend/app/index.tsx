@@ -369,7 +369,16 @@ export default function MoodFlowMain() {
       case 'dna':
         return <MusicDNAPage />;
       case 'discover':
-        return <DiscoverPage />;
+        return (
+          <DiscoverPage
+            preferredMoodId={state.moodFrom}
+            preferredActivityId={state.activity}
+            onSelectJourney={(selectedJourney) => {
+              setJourney(selectedJourney);
+              setPage('journey');
+            }}
+          />
+        );
       case 'mymusic':
         return (
           <MyMusicPage

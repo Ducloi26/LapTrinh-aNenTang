@@ -1,20 +1,26 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, Pressable, ActivityIndicator, TextInput } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { COLORS, TRACK_POOL, Track } from '@/constants/moodflow';
+import { COLORS, MOODS, Track } from '@/constants/moodflow';
 import SectionTitle from '@/components/moodflow/shared/SectionTitle';
 import GhostButton from '@/components/moodflow/shared/GhostButton';
 import MusicCard from '@/components/moodflow/journey/MusicCard';
 import Icon from '@/components/moodflow/shared/Icon';
 import JourneyPrivacyControl from '@/components/moodflow/journey/JourneyPrivacyControl';
-import { request } from '@/services/api-client';
 import { SavedJourney, deleteJourney, getSavedJourneys, restoreJourney } from '@/services/journey-service';
+import {
+  clearListeningHistory,
+  getFavoriteTracks,
+  getListeningHistory,
+  getListeningSummary,
+  ListeningHistoryItem,
+  ListeningSummary,
+  renameSavedJourney,
+} from '@/services/music-library-service';
 
 const TABS = [
   { id: 'journeys', label: '🎼 Journey của tôi' },
   { id: 'liked', label: '❤️ Bài hát đã thích' },
-  { id: 'saved', label: '🔖 Bài hát đã lưu' },
-  { id: 'playlists', label: '📂 Playlist' },
   { id: 'history', label: '🕒 Lịch sử nghe' },
 ];
 
@@ -32,39 +38,63 @@ export default function MyMusicPage({
   const [tab, setTab] = useState('journeys');
   const [journeys, setJourneys] = useState<SavedJourney[]>([]);
   const [likedTracks, setLikedTracks] = useState<Track[]>([]);
-  const [loading, setLoading] = useState(false);
+  const [history, setHistory] = useState<ListeningHistoryItem[]>([]);
+  const [summary, setSummary] = useState<ListeningSummary>({
+    totalListeningSeconds: 0, topGenre: null, topArtist: null, topMood: null,
+  });
+  const [loading, setLoading] = useState(true);
+  const [loadingFavorites, setLoadingFavorites] = useState(false);
+  const [loadingHistory, setLoadingHistory] = useState(false);
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [renamingId, setRenamingId] = useState<string | null>(null);
+  const [titleDraft, setTitleDraft] = useState('');
+  const [savingTitle, setSavingTitle] = useState(false);
+  const [clearingHistory, setClearingHistory] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // 1. Tải danh sách Journey đã lưu từ CSDL Backend
-  const fetchJourneys = async () => {
+  const fetchJourneys = async (signal?: AbortSignal) => {
     try {
       setLoading(true);
       setError(null);
-      setJourneys(await getSavedJourneys());
+      setJourneys(await getSavedJourneys(signal));
     } catch (err) {
-      setJourneys([]);
-      setError(err instanceof Error ? err.message : 'Không tải được thư viện.');
+      if (!signal?.aborted) setError(err instanceof Error ? err.message : 'Không tải được thư viện.');
     } finally {
-      setLoading(false);
+      if (!signal?.aborted) setLoading(false);
     }
   };
 
-  // 2. Tải danh sách bài hát đã thích từ CSDL Backend
-  const fetchLikedTracks = async () => {
+  const fetchLikedTracks = async (signal?: AbortSignal) => {
+    setLoadingFavorites(true);
     try {
-      const data = await request<{ data: Track[] }>('/tracks/liked');
-      if (Array.isArray(data.data)) {
-        setLikedTracks(data.data);
-      }
+      setLikedTracks(await getFavoriteTracks(signal));
     } catch (err) {
-      console.error('Lỗi tải bài hát đã thích:', err);
+      if (!signal?.aborted) setError(err instanceof Error ? err.message : 'Không tải được bài hát yêu thích.');
+    } finally {
+      if (!signal?.aborted) setLoadingFavorites(false);
+    }
+  };
+
+  const fetchHistory = async (signal?: AbortSignal) => {
+    setLoadingHistory(true);
+    try {
+      setHistory(await getListeningHistory(signal));
+    } catch (failure) {
+      if (!signal?.aborted) setError(failure instanceof Error ? failure.message : 'Không tải được lịch sử nghe.');
+    } finally {
+      if (!signal?.aborted) setLoadingHistory(false);
     }
   };
 
   useEffect(() => {
-    fetchJourneys();
-    fetchLikedTracks();
+    const controller = new AbortController();
+    void fetchJourneys(controller.signal);
+    void fetchLikedTracks(controller.signal);
+    void getListeningSummary(controller.signal).then(setSummary).catch((failure) => {
+      if (!controller.signal.aborted) setError(failure instanceof Error ? failure.message : 'Không tải được thống kê nghe nhạc.');
+    });
+    void fetchHistory(controller.signal);
+    return () => controller.abort();
   }, []);
 
   // Xóa hành trình khỏi CSDL
@@ -90,22 +120,47 @@ export default function MyMusicPage({
     }
   };
 
-  // Mẫu bài hát dự phòng nếu chưa có bài like
-  const fallbackLikedTracks: Track[] = [
-    TRACK_POOL.acknowledge?.[0],
-    TRACK_POOL.transition?.[0],
-    TRACK_POOL.elevate?.[0],
-    TRACK_POOL.transcendence?.[0],
-  ].filter(Boolean) as Track[];
+  const handleRenameJourney = async (journey: SavedJourney) => {
+    const title = titleDraft.trim();
+    if (!title || title.length > 200 || savingTitle) return;
+    setSavingTitle(true);
+    setError(null);
+    try {
+      const savedTitle = await renameSavedJourney(journey.id, title);
+      setJourneys((current) => current.map((item) =>
+        item.id === journey.id ? { ...item, title: savedTitle } : item,
+      ));
+      setRenamingId(null);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Không đổi được tên hành trình.');
+    } finally {
+      setSavingTitle(false);
+    }
+  };
 
-  const activeLikedList = likedTracks.length > 0 ? likedTracks : fallbackLikedTracks;
+  const handleClearHistory = async () => {
+    if (clearingHistory) return;
+    setClearingHistory(true);
+    setError(null);
+    try {
+      await clearListeningHistory();
+      setHistory([]);
+    } catch (failure) {
+      setError(failure instanceof Error ? failure.message : 'Không xóa được lịch sử nghe.');
+    } finally {
+      setClearingHistory(false);
+    }
+  };
 
-  // Thống kê động
+  const historyGroups = groupHistory(history);
+  const moodLabel = (id: string | null) =>
+    MOODS.find((mood) => mood.id === id)?.label ?? id ?? 'Chưa có dữ liệu';
+  const listeningHours = summary.totalListeningSeconds / 3600;
   const stats = [
-    { label: 'Hành trình đã lưu', value: `${journeys.length} hành trình` },
-    { label: 'Bài hát đã thích', value: `${likedTracks.length || fallbackLikedTracks.length} bài` },
-    { label: 'Cơ chế trị liệu', value: '4 Giai đoạn ISO' },
-    { label: 'Nhịp tim mục tiêu', value: '60 - 85 BPM' },
+    { label: 'Tổng giờ nghe', value: `${listeningHours.toLocaleString('vi-VN', { maximumFractionDigits: 1 })} giờ` },
+    { label: 'Thể loại yêu thích', value: summary.topGenre || 'Chưa có dữ liệu' },
+    { label: 'Nghệ sĩ yêu thích', value: summary.topArtist || 'Chưa có dữ liệu' },
+    { label: 'Mood yêu thích nhất', value: moodLabel(summary.topMood) },
   ];
 
   return (
@@ -143,7 +198,7 @@ export default function MyMusicPage({
             <Text style={styles.sectionHeading}>
               Hành trình 4 giai đoạn trong CSDL ({journeys.length})
             </Text>
-            <Pressable onPress={fetchJourneys} style={styles.refreshBtn}>
+            <Pressable onPress={() => void fetchJourneys()} style={styles.refreshBtn}>
               <Icon name="sparkles" size={13} color="#22D3EE" />
               <Text style={styles.refreshText}>Làm mới</Text>
             </Pressable>
@@ -173,7 +228,42 @@ export default function MyMusicPage({
                 <View key={j.id} style={styles.journeyCard}>
                   <View style={styles.journeyHeader}>
                     <View style={{ flex: 1 }}>
-                      <Text style={styles.journeyTitle}>{j.title}</Text>
+                      {renamingId === j.id ? (
+                        <View style={styles.renameRow}>
+                          <TextInput
+                            accessibilityLabel="Tên hành trình mới"
+                            value={titleDraft}
+                            onChangeText={setTitleDraft}
+                            maxLength={200}
+                            editable={!savingTitle}
+                            style={styles.renameInput}
+                            placeholder="Tên hành trình"
+                            placeholderTextColor={COLORS.faint}
+                          />
+                          <Pressable
+                            accessibilityRole="button"
+                            disabled={savingTitle || !titleDraft.trim()}
+                            onPress={() => void handleRenameJourney(j)}
+                          >
+                            <Text style={styles.renameAction}>{savingTitle ? 'Đang lưu...' : 'Lưu'}</Text>
+                          </Pressable>
+                          <Pressable disabled={savingTitle} onPress={() => setRenamingId(null)}>
+                            <Text style={styles.cancelRename}>Hủy</Text>
+                          </Pressable>
+                        </View>
+                      ) : (
+                        <View style={styles.journeyTitleRow}>
+                          <Text style={[styles.journeyTitle, { flex: 1 }]}>{j.title}</Text>
+                          <Pressable
+                            accessibilityRole="button"
+                            accessibilityLabel={`Đổi tên ${j.title}`}
+                            onPress={() => { setRenamingId(j.id); setTitleDraft(j.title); }}
+                            style={styles.renameButton}
+                          >
+                            <Icon name="edit" size={13} color={COLORS.ok} />
+                          </Pressable>
+                        </View>
+                      )}
                       <View style={styles.metaRow}>
                         <View style={styles.badgePill}>
                           <Icon name="clock" size={12} color="#22D3EE" />
@@ -247,46 +337,107 @@ export default function MyMusicPage({
         <View style={styles.sectionWrap}>
           <View style={styles.sectionHeaderRow}>
             <Text style={styles.sectionHeading}>
-              Bài hát yêu thích ({activeLikedList.length})
+              Bài hát yêu thích ({likedTracks.length})
             </Text>
-            {likedTracks.length === 0 && (
-              <Text style={styles.hintText}>
-                (Đang hiển thị bài hát mẫu đề xuất • Thả tim ❤️ bài hát để lưu vào đây)
-              </Text>
-            )}
+            <Pressable onPress={() => void fetchLikedTracks()} style={styles.refreshBtn}>
+              <Icon name="sparkles" size={13} color="#22D3EE" />
+              <Text style={styles.refreshText}>Làm mới</Text>
+            </Pressable>
           </View>
-
-          <View style={styles.trackList}>
-            {activeLikedList.map((t, i) => (
-              <MusicCard
-                key={t.id || i}
-                track={t}
-                initialLiked={true}
-                onPlay={() => onPlayTrack && onPlayTrack(t)}
-                onToggleLike={() => fetchLikedTracks()}
-              />
-            ))}
-          </View>
+          {loadingFavorites ? (
+            <View style={styles.loadingBox}>
+              <ActivityIndicator size="small" color="#22D3EE" />
+              <Text style={styles.loadingText}>Đang tải bài hát yêu thích...</Text>
+            </View>
+          ) : likedTracks.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Icon name="heart" size={30} color={COLORS.faint} />
+              <Text style={styles.emptyTitle}>Chưa có bài hát yêu thích</Text>
+              <Text style={styles.emptySub}>Nhấn biểu tượng trái tim trên bài hát để thêm vào đây.</Text>
+            </View>
+          ) : (
+            <View style={styles.trackList}>
+              {likedTracks.map((track) => (
+                <MusicCard
+                  key={track.id}
+                  track={track}
+                  initialLiked
+                  onPlay={() => onPlayTrack?.(track)}
+                  onToggleLike={(_track, liked) => {
+                    if (!liked) setLikedTracks((current) => current.filter((item) => item.id !== track.id));
+                  }}
+                />
+              ))}
+            </View>
+          )}
         </View>
       )}
 
-      {/* TAB 3: BÀI HÁT ĐÃ LƯU / PLAYLIST / LỊCH SỬ */}
-      {(tab === 'saved' || tab === 'playlists' || tab === 'history') && (
+      {tab === 'history' && (
         <View style={styles.sectionWrap}>
-          <Text style={styles.sectionHeading}>Danh mục {tab}</Text>
-          <View style={styles.trackList}>
-            {fallbackLikedTracks.map((t, i) => (
-              <MusicCard
-                key={i}
-                track={t}
-                onPlay={() => onPlayTrack && onPlayTrack(t)}
-              />
-            ))}
+          <View style={styles.sectionHeaderRow}>
+            <Text style={styles.sectionHeading}>Lịch sử nghe ({history.length}/50)</Text>
+            <Pressable
+              accessibilityRole="button"
+              disabled={clearingHistory || history.length === 0}
+              onPress={() => void handleClearHistory()}
+              style={[styles.clearHistoryButton, (clearingHistory || history.length === 0) && styles.disabledButton]}
+            >
+              <Icon name="trash" size={13} color={COLORS.danger} />
+              <Text style={styles.clearHistoryText}>{clearingHistory ? 'Đang xóa...' : 'Xóa lịch sử'}</Text>
+            </Pressable>
           </View>
+          {loadingHistory ? (
+            <View style={styles.loadingBox}>
+              <ActivityIndicator size="small" color="#22D3EE" />
+              <Text style={styles.loadingText}>Đang tải lịch sử nghe...</Text>
+            </View>
+          ) : history.length === 0 ? (
+            <View style={styles.emptyBox}>
+              <Icon name="clock" size={30} color={COLORS.faint} />
+              <Text style={styles.emptyTitle}>Lịch sử nghe đang trống</Text>
+            </View>
+          ) : (
+            <View style={styles.historyGroups}>
+              {historyGroups.map((group) => (
+                <View key={group.label}>
+                  <Text style={styles.historyGroupTitle}>{group.label}</Text>
+                  <View style={styles.trackList}>
+                    {group.items.map((item) => (
+                      <View key={item.historyId}>
+                        <MusicCard track={item} onPlay={() => onPlayTrack?.(item)} />
+                        <Text style={styles.historyTime}>
+                          {new Date(item.playedAt).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}
+                        </Text>
+                      </View>
+                    ))}
+                  </View>
+                </View>
+              ))}
+            </View>
+          )}
         </View>
       )}
     </View>
   );
+}
+
+function groupHistory(items: ListeningHistoryItem[]): { label: string; items: ListeningHistoryItem[] }[] {
+  const today = new Date();
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate()).getTime();
+  const groups = new Map<string, ListeningHistoryItem[]>();
+  for (const item of items) {
+    const playedAt = new Date(item.playedAt).getTime();
+    const day = new Date(playedAt);
+    const daysAgo = Math.floor((startOfToday - new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime()) / 86400000);
+    const label = daysAgo <= 0 ? 'Hôm nay' : daysAgo === 1 ? 'Hôm qua' : daysAgo < 7 ? 'Tuần này' : 'Trước đó';
+    groups.set(label, [...(groups.get(label) ?? []), item]);
+  }
+  const order = ['Hôm nay', 'Hôm qua', 'Tuần này', 'Trước đó'];
+  return order.flatMap((label) => {
+    const entries = groups.get(label);
+    return entries?.length ? [{ label, items: entries }] : [];
+  });
 }
 
 const styles = StyleSheet.create({
@@ -432,6 +583,73 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.text,
     marginBottom: 6,
+  },
+  journeyTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  renameButton: {
+    padding: 6,
+  },
+  renameRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8,
+  },
+  renameInput: {
+    flex: 1,
+    minWidth: 120,
+    color: COLORS.text,
+    backgroundColor: COLORS.surface,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  renameAction: {
+    color: COLORS.ok,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  cancelRename: {
+    color: COLORS.muted,
+    fontSize: 12,
+  },
+  clearHistoryButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    borderRadius: 8,
+    backgroundColor: 'rgba(251, 113, 133, 0.1)',
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+  },
+  clearHistoryText: {
+    color: COLORS.danger,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  historyGroups: {
+    gap: 18,
+  },
+  historyGroupTitle: {
+    color: COLORS.muted,
+    fontSize: 13,
+    fontWeight: '700',
+    marginBottom: 10,
+  },
+  historyTime: {
+    color: COLORS.faint,
+    fontSize: 11,
+    textAlign: 'right',
+    marginTop: -4,
+    marginBottom: 8,
   },
   metaRow: {
     flexDirection: 'row',
