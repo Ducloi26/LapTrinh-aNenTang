@@ -1,7 +1,7 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');
 const register=require('./audius-search-route');
 function fixture(payload, status=200){
-  let handler;const calls=[];register({get(p,h){assert.equal(p,'/api/audius/search');handler=h;}},{apiKey:'test-private-key',fetchImpl:async(url,options)=>{
+  let handler;const calls=[];register({get(p,h){assert.equal(p,'/api/audius/search');handler=h;}},{apiUrl:'https://discoveryprovider.audius.co/v1',siteUrl:'https://audius.co',apiKey:'test-private-key',fetchImpl:async(url,options)=>{
     calls.push({url:new URL(url),options});return {ok:status===200,status,json:async()=>payload};
   }});
   return {calls,async request(query){const r={code:200,status(n){this.code=n;return this;},json(b){this.body=b;return this;}};await handler({query},r);return r;}};
@@ -11,7 +11,7 @@ test('maps public streamable tracks and keeps credentials out of returned URLs',
   const r=await f.request({q:'Sơn Tùng & piano',offset:'20'});
   assert.equal(r.code,200);assert.equal(f.calls[0].url.searchParams.get('query'),'Sơn Tùng & piano');
   assert.equal(f.calls[0].options.headers['x-api-key'],'test-private-key');
-  assert.equal(r.body.data[0].audioUrl,'https://api.audius.co/v1/tracks/abc12/stream?app_name=MoodFlow');
+  assert.equal(r.body.data[0].audioUrl,'https://discoveryprovider.audius.co/v1/tracks/abc12/stream?app_name=MoodFlow');
   assert.ok(!JSON.stringify(r.body).includes('test-private-key'));assert.equal(r.body.data[0].shareUrl,'https://audius.co/artist/song');
 });
 test('does not offer gated, unavailable or malformed tracks for playback',async()=>{

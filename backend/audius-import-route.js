@@ -3,7 +3,13 @@ function sourceUuid(kind, id) {
   const hex = crypto.createHash('sha256').update(`moodflow:audius:${kind}:${id}`).digest('hex');
   return `${hex.slice(0,8)}-${hex.slice(8,12)}-5${hex.slice(13,16)}-a${hex.slice(17,20)}-${hex.slice(20,32)}`;
 }
-module.exports = function register(app, { admin, jwt, secret, apiKey, fetchImpl = globalThis.fetch }) {
+module.exports = function register(app, { admin, jwt, secret, apiKey, apiUrl, fetchImpl = globalThis.fetch }) {
+  if (!apiUrl) throw new Error('Cần cấu hình AUDIUS_API_URL trong backend/.env');
+  const base = new URL(apiUrl);
+  if (base.protocol !== 'https:' || !['api.audius.co', 'discoveryprovider.audius.co'].includes(base.hostname)) {
+    throw new Error('AUDIUS_API_URL must use an official Audius HTTPS host');
+  }
+  const root = base.href.replace(/\/$/, '');
   app.post('/api/audius/tracks/:sourceId/import', async (req, res) => {
     try {
       const token = (req.headers.authorization || '').replace(/^Bearer /, '');
@@ -13,7 +19,7 @@ module.exports = function register(app, { admin, jwt, secret, apiKey, fetchImpl 
     if (!admin) return res.status(503).json({success:false,error:'Backend chưa cấu hình khóa quản trị Supabase.'});
     try {
       // Never trust title, artist, stream URLs or features supplied by the browser.
-      const response = await fetchImpl(`https://api.audius.co/v1/tracks/${req.params.sourceId}`, {
+      const response = await fetchImpl(`${root}/tracks/${req.params.sourceId}`, {
         headers: apiKey ? {'x-api-key':apiKey} : {}, signal:AbortSignal.timeout(15000),
       });
       if (!response.ok) throw Error('Không đọc được bài từ Audius.');
@@ -27,7 +33,7 @@ module.exports = function register(app, { admin, jwt, secret, apiKey, fetchImpl 
       if (artist.error) throw artist.error;
       const row = {id,artist_id:artistId,title:t.title,genre:t.genre || 'Khác',duration_sec:Math.max(1,Math.round(t.duration)),
         cover_url:safeUrl(t.artwork?.['480x480'] || t.artwork?.['150x150']) || '',
-        audio_url:`https://api.audius.co/v1/tracks/${t.id}/stream?app_name=MoodFlow`};
+        audio_url:`${root}/tracks/${t.id}/stream?app_name=MoodFlow`};
       const track = await admin.from('tracks').upsert(row,{onConflict:'id'});
       if (track.error) throw track.error;
       const bpm = typeof t.bpm === 'number' && Number.isFinite(t.bpm) && t.bpm > 0 ? Math.round(t.bpm) : null;

@@ -30,8 +30,8 @@ const JWT_SECRET = config.JWT_SECRET || 'moodflow_jwt_secret_token_key_2026';
 app.use(cors());
 app.use(express.json());
 require('./listening-history-route')(app, { admin: supabaseAdmin, jwt, secret: JWT_SECRET });
-require('./audius-search-route')(app, { apiKey: config.AUDIUS_API_KEY, apiUrl: config.AUDIUS_API_URL || undefined });
-require('./audius-import-route')(app, { admin: supabaseAdmin, jwt, secret: JWT_SECRET, apiKey: config.AUDIUS_API_KEY });
+require('./audius-search-route')(app, { apiKey: config.AUDIUS_API_KEY, apiUrl: config.AUDIUS_API_URL || config.URL_audius, siteUrl: config.AUDIUS_SITE_URL });
+require('./audius-import-route')(app, { admin: supabaseAdmin, jwt, secret: JWT_SECRET, apiKey: config.AUDIUS_API_KEY, apiUrl: config.AUDIUS_API_URL || config.URL_audius });
 
 // Ghi log terminal đẹp mắt cho mỗi lượt gọi
 app.use((req, res, next) => {

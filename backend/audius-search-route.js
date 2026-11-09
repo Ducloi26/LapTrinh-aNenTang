@@ -1,5 +1,6 @@
-module.exports = function registerAudius(app, { apiKey, apiUrl = 'https://api.audius.co/v1', fetchImpl = globalThis.fetch } = {}) {
+module.exports = function registerAudius(app, { apiKey, apiUrl, siteUrl, fetchImpl = globalThis.fetch } = {}) {
   // Restrict configuration to the expected HTTPS API; never proxy arbitrary URLs.
+  if (!apiUrl) throw new Error('Cần cấu hình AUDIUS_API_URL trong backend/.env');
   const base = new URL(apiUrl);
   if (base.protocol !== 'https:' || !['api.audius.co', 'discoveryprovider.audius.co'].includes(base.hostname)) {
     throw new Error('AUDIUS_API_URL must use an official Audius HTTPS host');
@@ -26,7 +27,7 @@ module.exports = function registerAudius(app, { apiKey, apiUrl = 'https://api.au
         cover: safeUrl(t.artwork?.['480x480'] || t.artwork?.['150x150']),
         // Public stream endpoint, no private bearer credentials exposed in URLs.
         audioUrl: `${root}/tracks/${encodeURIComponent(t.id)}/stream?app_name=MoodFlow`,
-        shareUrl: t.permalink?.startsWith('/') ? `https://audius.co${t.permalink}` : '',
+        shareUrl: siteUrl && t.permalink?.startsWith('/') ? new URL(t.permalink, siteUrl).href : '',
         licenseUrl: '',
       }));
       return res.json({ success: true, data, nextOffset: payload.data.length === 20 ? offset + 20 : null, testMode: false });

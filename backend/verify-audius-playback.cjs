@@ -32,7 +32,7 @@ window.verification=(async()=>{
 })().catch(e=>document.getElementById('result').textContent=JSON.stringify({passed:false,error:e.message}));
 </script>`;
 const app=express(),config=require('./config').loadConfig();
-require('./audius-search-route')(app,{apiKey:config.AUDIUS_API_KEY,apiUrl:config.AUDIUS_API_URL||undefined});
+require('./audius-search-route')(app,{apiKey:config.AUDIUS_API_KEY,apiUrl:config.AUDIUS_API_URL||config.URL_audius,siteUrl:config.AUDIUS_SITE_URL});
 app.get('/',(_req,res)=>res.type('html').send(html));
 const server=app.listen(0,'127.0.0.1',()=>void run());
 async function run(){

@@ -1,9 +1,9 @@
 const {test}=require('node:test');const assert=require('node:assert/strict');const register=require('./audius-import-route');
 function fixture(){
  let handler;const writes=[];let fetches=0;
- register({post(p,h){handler=h;}},{secret:'test',jwt:{verify(t){if(t!=='valid')throw Error('bad');return {id:'user'};}},
+ register({post(p,h){handler=h;}},{apiUrl:'https://discoveryprovider.audius.co/v1',secret:'test',jwt:{verify(t){if(t!=='valid')throw Error('bad');return {id:'user'};}},
  admin:{from(table){return {async upsert(row,options){writes.push({table,row,options});return {error:null};}};}},
- fetchImpl:async()=>{fetches++;return {ok:true,json:async()=>({data:{id:'lvBQl',title:'Real title',user:{id:'artist',name:'Real artist'},genre:'R&B/Soul',duration:200,bpm:131.9,is_streamable:true}})};}});
+ fetchImpl:async(url)=>{assert.equal(url,'https://discoveryprovider.audius.co/v1/tracks/lvBQl');fetches++;return {ok:true,json:async()=>({data:{id:'lvBQl',title:'Real title',user:{id:'artist',name:'Real artist'},genre:'R&B/Soul',duration:200,bpm:131.9,is_streamable:true}})};}});
  return {writes,get fetches(){return fetches;},async call(token='valid',sourceId='lvBQl'){
   const r={code:200,status(n){this.code=n;return this;},json(b){this.body=b;return this;}};
   await handler({headers:{authorization:token},params:{sourceId},body:{title:'Fake title'}},r);return r;
@@ -16,6 +16,7 @@ test('imports source metadata under stable UUIDs without inventing DNA or resett
  const feature=f.writes.find(w=>w.table==='track_features');assert.equal(feature.row.bpm,132);assert.equal(feature.row.energy,null);
  assert.equal(feature.row.valence,null);assert.equal(feature.row.instrumentalness,null);assert.equal(feature.options.ignoreDuplicates,true);
  assert.equal(track.row.cover_url,'');
+ assert.equal(track.row.audio_url,'https://discoveryprovider.audius.co/v1/tracks/lvBQl/stream?app_name=MoodFlow');
 });
 test('rejects unauthenticated import and malformed source IDs before network or database access',async()=>{
  const f=fixture();assert.equal((await f.call('invalid')).code,401);assert.equal((await f.call('valid','../evil')).code,400);
